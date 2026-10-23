@@ -50,7 +50,7 @@ Kirra already depends on all four runtime packages.
 | `maxPlaneOffset` | number | 0.5 | Neighbours more than this × `scale` off the source plane are dropped (bridging guard, for close parallel walls). |
 | `minVotes` | number | 2 | Votes a triangle needs to be accepted. |
 | `tolerance` | number | max(0.001, 0.25 × median spacing) | Weld tolerance in world units (metres) (Q6). |
-| `breaklineSnap` | number | 0.001 | Cloud points this close to a break line are dropped (Q1). |
+| `breaklineSnap` | number | 0.001 | Cloud points this close to a break line are dropped (Q1). In world units: 1 mm for a cloud in metres. Set it per call for clouds in other units. |
 | `closeHoles` | `false \| { maxLoopEdges }` | `false` | Opt-in. |
 
 Normals point **out of rock into the void**.
@@ -75,7 +75,7 @@ src/
     clipConstraints.js
   bms/
     ingestToBMS.js
-    weldSoup.js
+    cleanSoup.js
     orientMesh.js
   validate/validateMesh.js
   post/closeHoles.js
@@ -150,14 +150,16 @@ function ingestToBMS(cloud, triangles, tolerance) {}
 
 Insert each used vertex id through `pool.getOrCreate(x, y, z)` once and remember the `PoolVertex` it maps to. Push `{ v0, v1, v2, mesh: "A", origIdx: t }` for each triangle.
 
-### 6.6 weldSoup
+### 6.6 cleanSoup
 
 ```js
 /** @returns {{ merged, degenerate, boundaryEdges, nonManifoldEdges, collapsedConstraints }} */
-function weldSoup(bms, constraints) {}
+function cleanSoup(bms, constraints) {}
 ```
 
-- The pool has already merged vertices within tolerance. `merged` is the number of ids that landed on a `PoolVertex` another id already used.
+Welding is done by the BMS pool: `ingestToBMS` sends every vertex through `pool.getOrCreate`, which merges anything within tolerance. trimesh-build has no weld algorithm of its own. This step only tidies up after the pool:
+
+- `merged` is the number of ids that landed on a `PoolVertex` another id already used.
 - Remove triangles with two corners on the same `PoolVertex`, then remove duplicate triangles (the same vertex set).
 - Count faces per `edgeKey(String(a.id), String(b.id))`.
 - Report any constrained edge whose two endpoints merged.
@@ -264,4 +266,5 @@ There are also unit tests for each stage: projection frame, umbrella filter, vot
 6. **`OrientTriangle` is replaced by `orientMesh`** (consistent winding, then viewpoint or closed-volume sign).
 7. **The bridging guard** (neighbour normal agreement plus plane offset) is new.
 8. **The reconstruction algorithm is pluggable** through a registry, for ball pivoting and Poisson later.
-9. **Open questions Q1 to Q7 are resolved** as in section 4 and section 6; Q7 (welding cost) is measured during implementation.
+9. **Open questions Q1 to Q7 are resolved** as in section 4 and section 6. Q1 is the `breaklineSnap` option, default 1 mm. Q7 falls away: welding is done by the BMS pool, so trimesh-build has no weld stage to tune.
+10. **`WeldSoup` is renamed `cleanSoup`.** The BMS pool does the welding; this step only removes collapsed and duplicate triangles and counts edges.
