@@ -8,10 +8,10 @@
 // resolve, so it is a reconstruction defect, not a hole in the data.
 // Real holes (occlusion, the scan edge) are left for closeHoles.
 //
-// Triangulated with trimesh-boolean triangulateLoop on the loop's own
-// PoolVertex objects (patchLoopIds, method "fan", shared with
-// patchLoop): no Steiner points. Run orientMesh afterwards to
-// make the new triangles' winding agree with their neighbours.
+// Patched with patchLoopIds, method "auto" (shared with patchLoop):
+// trimesh-boolean triangulateLoop on the loop's own vertices first,
+// then a centroid fan, then a fan from a loop vertex. Run orientMesh
+// afterwards to make the new triangles' winding agree.
 //=============================================================
 
 import { buildEdgeMap } from "../bms/edges.js";
@@ -30,7 +30,7 @@ export function fillGaps(bms, mesh, maxGapEdges) {
 	var loops = mesh.boundaryLoops || [];
 	for (var i = 0; i < loops.length; i++) {
 		if (loops[i].length > maxGapEdges) continue;
-		var p = patchLoopIds(bms, edges, loops[i], "fan");
+		var p = patchLoopIds(bms, edges, loops[i], "auto");
 		if (!p.reason) { filled++; added += p.added; }
 	}
 	return { filled: filled, triangles: added };

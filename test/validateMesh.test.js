@@ -87,6 +87,20 @@ describe("validateMesh with bad winding", function () {
 	});
 });
 
+describe("validateMesh loops are always simple", function () {
+	it("two holes touching at one corner give two simple loops", function () {
+		// 4 x 4 vertex grid, quads (0,0) and (1,1) removed: the holes share vertex (1,1)
+		var g = grid([0, 4]);
+		var m = validateMesh(bmsOf(g.c, g.t), "unresolved");
+		var total = 0;
+		m.boundaryLoops.forEach(function (l) {
+			expect(new Set(l).size).toBe(l.length);
+			total += l.length;
+		});
+		expect(total).toBe(m.boundaryEdgeCount);
+	});
+});
+
 describe("pointInside", function () {
 	it("centroid inside, far point outside", function () {
 		var b = bmsOf(TET, TET_T);

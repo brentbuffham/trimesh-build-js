@@ -8,12 +8,30 @@ function cappedSphere() {
 }
 
 describe("patchLoop", function () {
+	it("auto is the default and reports the method it used", function () {
+		var r = cappedSphere();
+		var p = patchLoop(r, 0);
+		expect(p.method).toBe("fan");
+		expect(r.mesh.closed).toBe(true);
+	});
+
+	it("vertex fan closes a loop on its own vertices", function () {
+		var r = cappedSphere();
+		var poolBefore = r.pool.size();
+		var p = patchLoop(r, 0, { method: "vertexFan" });
+		expect(p.refused).toEqual([]);
+		expect(p.method).toBe("vertexFan");
+		expect(r.pool.size()).toBe(poolBefore);
+		expect(r.mesh.closed).toBe(true);
+		expect(windingConsistent(r.soup)).toBe(true);
+	});
+
 	it("fan patch (Kirra Fill) closes the capped sphere with no new points", function () {
 		var r = cappedSphere();
 		expect(r.mesh.boundaryLoops.length).toBe(1);
 		var poolBefore = r.pool.size();
 		var loopLen = r.mesh.boundaryLoops[0].length;
-		var p = patchLoop(r, 0);
+		var p = patchLoop(r, 0, { method: "fan" });
 		expect(p.refused).toEqual([]);
 		expect(p.added).toBe(loopLen - 2);
 		expect(r.pool.size()).toBe(poolBefore);

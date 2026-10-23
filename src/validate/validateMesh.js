@@ -79,10 +79,31 @@ function traceLoops(soup, edges) {
 				cur = step.to;
 			}
 			if (!firstForward) loop = [loop[0]].concat(loop.slice(1).reverse());
-			loops.push(loop);
+			var simple = splitSelfTouching(loop);
+			for (var q = 0; q < simple.length; q++) loops.push(simple[q]);
 		}
 	}
 	return loops;
+}
+
+// Split a loop that passes through a vertex more than once (holes touching
+// at a pinch vertex) into simple loops: the run between two visits of a
+// vertex is one loop. Ported from trimesh-boolean boundaryLoops.js
+// _splitSelfTouching (private there), keyed by PoolVertex id.
+function splitSelfTouching(loop) {
+	var out = [], stack = [], at = new Map();
+	for (var i = 0; i < loop.length; i++) {
+		var id = loop[i];
+		if (at.has(id)) {
+			var cycle = stack.splice(at.get(id));
+			for (var c = 0; c < cycle.length; c++) at.delete(cycle[c]);
+			if (cycle.length >= 3) out.push(cycle);
+		}
+		at.set(id, stack.length);
+		stack.push(id);
+	}
+	if (stack.length >= 3) out.push(stack);
+	return out;
 }
 
 // Interior edges whose two triangles run them the same way

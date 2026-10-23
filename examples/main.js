@@ -347,7 +347,7 @@ function patchSelected() {
 	var snap = snapshot();
 	var p = patchLoop(lastResult, selectedLoop, { method: $("patchMethod").value });
 	if (p.added > 0) undoStack.push(snap);
-	afterPatch(p, "Patched loop " + selectedLoop);
+	afterPatch(p, "Patched loop " + selectedLoop + (p.method ? " (" + p.method + ")" : ""));
 }
 
 $("patchSel").addEventListener("click", patchSelected);
@@ -358,7 +358,8 @@ $("patchAll").addEventListener("click", function () {
 	var snap = snapshot();
 	var p = patchLoops(lastResult, { maxEdges: Number($("patchMax").value), method: $("patchMethod").value });
 	if (p.added > 0) undoStack.push(snap);
-	afterPatch(p, "Patched " + p.patched + " loop" + (p.patched === 1 ? "" : "s"));
+	afterPatch(p, "Patched " + p.patched + " loop" + (p.patched === 1 ? "" : "s") +
+		" (fan " + p.methods.fan + ", centroid " + p.methods.centroid + ", vertex fan " + p.methods.vertexFan + ")");
 });
 
 $("undoPatch").addEventListener("click", function () {

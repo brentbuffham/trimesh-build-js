@@ -8,9 +8,15 @@
 // to agree with the mesh triangle across a shared loop edge. Here
 // edges are matched by PoolVertex id (exact) rather than rounded keys.
 //
-// method "fan"      - triangulateLoop: no new points (Kirra Fill).
-// method "centroid" - one new point at the loop centroid, fanned to
-//                     every loop edge; suits big, roughly round holes.
+// method "fan"       - triangulateLoop: no new points (Kirra Fill).
+// method "centroid"  - one new point at the loop centroid, fanned to
+//                      every loop edge; suits big, roughly round holes.
+// method "vertexFan" - fan from one loop vertex, trying each in turn.
+// method "auto"      - (default) fan, then centroid, then vertexFan:
+//                      cave loops are rarely flat, so Kirra's fan alone
+//                      refuses most of them.
+// Figure-8 loops arrive already split (validateMesh), so each lobe is
+// patched on its own.
 //
 // A loop that cannot be patched is refused with a reason, never thrown:
 // not simple, not all open edges, along a break line, or a patch that
@@ -35,8 +41,8 @@ function runs(t, a, b) {
  * @param {{pool: Object, soup: Array<Object>, constraintPoolEdges?: Set<string>}} bms - soup is appended to
  * @param {Map<string, number[]>} edges - buildEdgeMap(bms.soup), kept up to date here
  * @param {number[]} loop - PoolVertex ids in order, not repeated at the end
- * @param {"fan"|"centroid"} method
- * @returns {{added: number, reason: string|null}}
+ * @param {"auto"|"fan"|"centroid"|"vertexFan"} method - auto tries fan, centroid, vertexFan
+ * @returns {{added: number, reason: string|null, method: string|null}} method actually used
  */
 export function patchLoopIds(bms, edges, loop, method) {
 	var cons = bms.constraintPoolEdges || new Set();
@@ -57,27 +63,63 @@ export function patchLoopIds(bms, edges, loop, method) {
 		onLoop.add(k);
 	}
 
-	var tris = [];
-	if (method === "centroid" && n > 3) {
+	// A new edge that is not on the loop must not exist in the mesh already
+	function diagonalsFree(tl) {
+		for (var t = 0; t < tl.length; t++) {
+			var ids = [tl[t].v0.id, tl[t].v1.id, tl[t].v2.id];
+			if (ids[0] === ids[1] || ids[1] === ids[2] || ids[0] === ids[2]) return false;
+			for (var d = 0; d < 3; d++) {
+				var p = ids[d], q = ids[(d + 1) % 3];
+				if (!onLoop.has(poolEdgeKey(p, q)) && faces(p, q) > 0) return false;
+			}
+		}
+		return true;
+	}
+
+	// fan: trimesh-boolean triangulateLoop on the loop's own vertices (Kirra Fill)
+	function fanTris() {
+		var tl = triangulateLoop(loop.map(function (id) { return byId[id]; }));
+		if (tl.length !== n - 2) return { reason: "the loop could not be triangulated on its own vertices" };
+		if (!diagonalsFree(tl)) return { reason: "the patch would give an edge a third face" };
+		return { tris: tl.map(function (t) { return { v0: t.v0, v1: t.v1, v2: t.v2 }; }) };
+	}
+
+	// centroid: one new point at the loop centroid, fanned to every loop edge
+	function centroidTris() {
+		if (n === 3) return { tris: [{ v0: byId[loop[0]], v1: byId[loop[1]], v2: byId[loop[2]] }] };
 		var cx = 0, cy = 0, cz = 0;
 		for (var j = 0; j < n; j++) { var v = byId[loop[j]]; cx += v.x; cy += v.y; cz += v.z; }
 		var before = bms.pool.size();
 		var c = bms.pool.getOrCreate(cx / n, cy / n, cz / n);
-		if (bms.pool.size() === before) return { added: 0, reason: "the centroid lands on an existing vertex; use method fan" };
-		for (var g = 0; g < n; g++) tris.push({ v0: byId[loop[g]], v1: byId[loop[(g + 1) % n]], v2: c });
-	} else {
-		var tl = triangulateLoop(loop.map(function (id) { return byId[id]; }));
-		if (tl.length !== n - 2) return { added: 0, reason: "the loop could not be triangulated on its own vertices" };
-		for (var t = 0; t < tl.length; t++) {
-			var ids = [tl[t].v0.id, tl[t].v1.id, tl[t].v2.id];
-			if (ids[0] === ids[1] || ids[1] === ids[2] || ids[0] === ids[2]) return { added: 0, reason: "the triangulation is degenerate" };
-			for (var d = 0; d < 3; d++) {
-				var p = ids[d], q = ids[(d + 1) % 3];
-				if (!onLoop.has(poolEdgeKey(p, q)) && faces(p, q) > 0) return { added: 0, reason: "the patch would give an edge a third face" };
-			}
-			tris.push({ v0: tl[t].v0, v1: tl[t].v1, v2: tl[t].v2 });
-		}
+		if (bms.pool.size() === before) return { reason: "the centroid lands on an existing vertex" };
+		var out = [];
+		for (var g = 0; g < n; g++) out.push({ v0: byId[loop[g]], v1: byId[loop[(g + 1) % n]], v2: c });
+		return { tris: out };
 	}
+
+	// vertexFan: fan from one loop vertex to all the others (as trimesh-boolean
+	// fillOpenEdgeLoops does from vertex 0), trying each vertex in turn until
+	// none of the fan's diagonals already exists in the mesh
+	function vertexFanTris() {
+		for (var k = 0; k < n; k++) {
+			var out = [];
+			for (var j = 1; j < n - 1; j++) {
+				out.push({ v0: byId[loop[k]], v1: byId[loop[(k + j) % n]], v2: byId[loop[(k + j + 1) % n]] });
+			}
+			if (diagonalsFree(out)) return { tris: out };
+		}
+		return { reason: "every vertex fan would give an edge a third face" };
+	}
+
+	var order = method === "auto" ? ["fan", "centroid", "vertexFan"] : [method];
+	var made = null, used = null, reasons = [];
+	for (var o = 0; o < order.length && !made; o++) {
+		var r = order[o] === "centroid" ? centroidTris() : order[o] === "vertexFan" ? vertexFanTris() : fanTris();
+		if (r.tris) { made = r.tris; used = order[o]; }
+		else reasons.push(order[o] + ": " + r.reason);
+	}
+	if (!made) return { added: 0, reason: reasons.join("; "), method: null };
+	var tris = made;
 
 	// Kirra's orientation rule, on exact edges: a fill triangle that shares a
 	// loop edge with the mesh runs it the opposite way to the mesh triangle.
@@ -102,7 +144,7 @@ export function patchLoopIds(bms, edges, loop, method) {
 			edges.get(key).push(nt.origIdx);
 		}
 	}
-	return { added: tris.length, reason: null };
+	return { added: tris.length, reason: null, method: used };
 }
 
 // A loop given as an index, PoolVertex ids, or world points [x, y, z] / {x, y, z}
@@ -134,6 +176,14 @@ function resolveLoop(result, loop) {
 	return { ids: ids };
 }
 
+var METHODS = { auto: 1, fan: 1, centroid: 1, vertexFan: 1 };
+
+// Default auto: Kirra's fan first, then the fallbacks
+function methodOf(options) {
+	var m = options && options.method;
+	return m && METHODS[m] ? m : "auto";
+}
+
 function bmsOf(result) {
 	return {
 		pool: result.pool,
@@ -155,41 +205,43 @@ function refresh(result, bms) {
  * @param {Object} result - from buildMesh; changed in place
  * @param {number|number[]|Array<number[]|{x: number, y: number, z: number}>} loop -
  *   an index into result.mesh.boundaryLoops, PoolVertex ids, or world points
- * @param {{method?: "fan"|"centroid"}} [options] - method default "fan" (Kirra's Fill)
- * @returns {{added: number, refused: Array<{loop: *, reason: string}>}}
+ * @param {{method?: "auto"|"fan"|"centroid"|"vertexFan"}} [options] - method default "auto"
+ * @returns {{added: number, method: string|null, refused: Array<{loop: *, reason: string}>}}
  */
 export function patchLoop(result, loop, options) {
-	var method = options && options.method === "centroid" ? "centroid" : "fan";
+	var method = methodOf(options);
 	var r = resolveLoop(result, loop);
-	if (!r.ids) return { added: 0, refused: [{ loop: loop, reason: r.reason }] };
+	if (!r.ids) return { added: 0, method: null, refused: [{ loop: loop, reason: r.reason }] };
 	var bms = bmsOf(result);
 	var p = patchLoopIds(bms, buildEdgeMap(bms.soup), r.ids, method);
-	if (p.reason) return { added: 0, refused: [{ loop: loop, reason: p.reason }] };
+	if (p.reason) return { added: 0, method: null, refused: [{ loop: loop, reason: p.reason }] };
 	refresh(result, bms);
-	return { added: p.added, refused: [] };
+	return { added: p.added, method: p.method, refused: [] };
 }
 
 /**
  * Patch every boundary loop with at most maxEdges edges (or the loops given).
  * @param {Object} result - from buildMesh; changed in place
- * @param {{maxEdges?: number, loops?: Array, method?: "fan"|"centroid"}} [options]
- * @returns {{added: number, patched: number, refused: Array<{loop: *, reason: string}>}}
+ * @param {{maxEdges?: number, loops?: Array, method?: "auto"|"fan"|"centroid"|"vertexFan"}} [options]
+ * @returns {{added: number, patched: number, methods: {fan: number, centroid: number, vertexFan: number},
+ *   refused: Array<{loop: *, reason: string}>}}
  */
 export function patchLoops(result, options) {
 	var opts = options || {};
-	var method = opts.method === "centroid" ? "centroid" : "fan";
+	var method = methodOf(opts);
 	var maxEdges = opts.maxEdges !== undefined ? opts.maxEdges : Infinity;
 	var bms = bmsOf(result);
 	var edges = buildEdgeMap(bms.soup);
 	var added = 0, patched = 0, refused = [];
+	var methods = { fan: 0, centroid: 0, vertexFan: 0 };
 	var loops = opts.loops || result.mesh.boundaryLoops.filter(function (l) { return l.length <= maxEdges; });
 	for (var i = 0; i < loops.length; i++) {
 		var r = resolveLoop(result, loops[i]);
 		if (!r.ids) { refused.push({ loop: loops[i], reason: r.reason }); continue; }
 		var p = patchLoopIds(bms, edges, r.ids, method);
 		if (p.reason) refused.push({ loop: loops[i], reason: p.reason });
-		else { added += p.added; patched++; }
+		else { added += p.added; patched++; methods[p.method]++; }
 	}
 	if (patched > 0) refresh(result, bms);
-	return { added: added, patched: patched, refused: refused };
+	return { added: added, patched: patched, methods: methods, refused: refused };
 }
