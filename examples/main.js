@@ -8,7 +8,7 @@
 
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { buildMesh, toIndexed } from "../src/index.js";
+import { buildMesh, toIndexed, patchLoop, patchLoops } from "../src/index.js";
 import { syntheticSource, fileSource, sampleSource } from "./clouds.js";
 
 var $ = function (id) { return document.getElementById(id); };
@@ -97,7 +97,7 @@ function edgeUse(soup) {
 	return m;
 }
 
-function showResult(result, cols) {
+function showResult(result, cols, keepCamera) {
 	clearGroup();
 	var byId = result.pool.getAll();
 	var geom = meshGeometry(result);
@@ -157,7 +157,7 @@ function showResult(result, cols) {
 	group.add(layers.points);
 
 	applyToggles();
-	frame(geom);
+	if (!keepCamera) frame(geom);
 }
 
 function frame(geom) {
@@ -248,6 +248,8 @@ async function build() {
 		var result = buildMesh(currentSource.cols, readOptions(currentSource));
 		var ms = Math.round(performance.now() - t0);
 		lastResult = result;
+		undoStack = [];
+		clearLoopSelection();
 		showResult(result, currentSource.cols);
 		showReport(result, ms);
 	} catch (err) {
@@ -259,6 +261,118 @@ async function build() {
 }
 
 $("build").addEventListener("click", build);
+
+// ── Patch loops (Kirra's Mesh Edit "Fill", via patchLoop) ──
+var selectedLoop = -1;
+var selectionLine = null;
+var undoStack = [];
+
+function clearLoopSelection() {
+	selectedLoop = -1;
+	if (selectionLine) {
+		scene.remove(selectionLine);
+		selectionLine.geometry.dispose();
+		selectionLine.material.dispose();
+		selectionLine = null;
+	}
+}
+
+function showLoopSelection() {
+	var loop = lastResult.mesh.boundaryLoops[selectedLoop];
+	var byId = lastResult.pool.getAll(), pos = [];
+	for (var i = 0; i < loop.length; i++) {
+		var a = byId[loop[i]], b = byId[loop[(i + 1) % loop.length]];
+		pos.push(a.x, a.y, a.z, b.x, b.y, b.z);
+	}
+	var g = new THREE.BufferGeometry();
+	g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+	selectionLine = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0x44ff44, depthTest: false, transparent: true }));
+	selectionLine.renderOrder = 3;
+	scene.add(selectionLine);
+}
+
+// The loop with a vertex nearest the click on screen (within 24 px)
+function pickLoop(clientX, clientY) {
+	var rect = renderer.domElement.getBoundingClientRect();
+	var byId = lastResult.pool.getAll(), v = new THREE.Vector3();
+	var best = -1, bestD = 24;
+	lastResult.mesh.boundaryLoops.forEach(function (loop, li) {
+		for (var i = 0; i < loop.length; i++) {
+			var p = byId[loop[i]];
+			v.set(p.x, p.y, p.z).project(camera);
+			if (v.z > 1) continue;
+			var sx = rect.left + (v.x + 1) / 2 * rect.width, sy = rect.top + (1 - v.y) / 2 * rect.height;
+			var d = Math.hypot(sx - clientX, sy - clientY);
+			if (d < bestD) { bestD = d; best = li; }
+		}
+	});
+	return best;
+}
+
+var downAt = null;
+renderer.domElement.addEventListener("pointerdown", function (e) { downAt = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener("pointerup", function (e) {
+	if (!$("patchMode").checked || !lastResult || !downAt) return;
+	if (Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4) return; // an orbit drag, not a click
+	clearLoopSelection();
+	selectedLoop = pickLoop(e.clientX, e.clientY);
+	if (selectedLoop >= 0) {
+		showLoopSelection();
+		$("error").textContent = "Loop " + selectedLoop + " selected (" + lastResult.mesh.boundaryLoops[selectedLoop].length + " edges). Press Patch selected or Enter.";
+	} else {
+		$("error").textContent = "No open loop near that click.";
+	}
+});
+
+// Patching appends triangles and flips some in place: keep a shallow copy for undo
+function snapshot() {
+	return {
+		soup: lastResult.soup.map(function (t) { return { v0: t.v0, v1: t.v1, v2: t.v2, mesh: t.mesh, origIdx: t.origIdx }; }),
+		mesh: lastResult.mesh,
+		orientation: lastResult.report.orientation
+	};
+}
+
+function afterPatch(p, what) {
+	clearLoopSelection();
+	showResult(lastResult, currentSource.cols, true);
+	showReport(lastResult, 0);
+	var msg = what + ": " + p.added + " triangle" + (p.added === 1 ? "" : "s") + " added.";
+	if (p.refused.length) msg += " Refused " + p.refused.length + ": " + p.refused[0].reason + (p.refused.length > 1 ? " (and others)" : "") + ".";
+	$("error").textContent = msg;
+}
+
+function patchSelected() {
+	if (!lastResult || selectedLoop < 0) { $("error").textContent = "Tick patch loops, then click near a red loop."; return; }
+	var snap = snapshot();
+	var p = patchLoop(lastResult, selectedLoop, { method: $("patchMethod").value });
+	if (p.added > 0) undoStack.push(snap);
+	afterPatch(p, "Patched loop " + selectedLoop);
+}
+
+$("patchSel").addEventListener("click", patchSelected);
+window.addEventListener("keydown", function (e) { if (e.key === "Enter" && $("patchMode").checked && selectedLoop >= 0) patchSelected(); });
+
+$("patchAll").addEventListener("click", function () {
+	if (!lastResult) return;
+	var snap = snapshot();
+	var p = patchLoops(lastResult, { maxEdges: Number($("patchMax").value), method: $("patchMethod").value });
+	if (p.added > 0) undoStack.push(snap);
+	afterPatch(p, "Patched " + p.patched + " loop" + (p.patched === 1 ? "" : "s"));
+});
+
+$("undoPatch").addEventListener("click", function () {
+	var snap = undoStack.pop();
+	if (!snap) { $("error").textContent = "Nothing to undo."; return; }
+	lastResult.soup.length = 0;
+	snap.soup.forEach(function (t) { lastResult.soup.push(t); });
+	lastResult.mesh = snap.mesh;
+	lastResult.report.orientation = snap.orientation;
+	clearLoopSelection();
+	showResult(lastResult, currentSource.cols, true);
+	showReport(lastResult, 0);
+	$("error").textContent = "Undid the last patch.";
+});
 $("source").addEventListener("change", function () {
 	currentSource = null;
 	var isFile = $("source").value === "file";

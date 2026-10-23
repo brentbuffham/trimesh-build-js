@@ -57,6 +57,22 @@ var indexed = toIndexed(result);   // { positions: Float64Array (world), index: 
 // addGeneratedSurface({ id, name, positions: indexed.positions, index: indexed.index, layerName })
 ```
 
+### Patching loops
+
+`patchLoop` fills one open loop you choose. It works like **Fill** in Kirra's Mesh Edit, and is ported from `LocalVoidFill.fillLoopWithTriangles`. It uses trimesh-boolean's `triangulateLoop` on the loop's own vertices and turns each new triangle to agree with its neighbour. The result is then re-oriented and re-validated, so `result.mesh` stays current.
+
+```js
+import { patchLoop, patchLoops } from "trimesh-build-js";
+
+patchLoop(result, 0);                                  // loop index in result.mesh.boundaryLoops
+patchLoop(result, pickedPoints);                        // or world [x, y, z] points, e.g. picked in Kirra
+patchLoop(result, 2, { method: "centroid" });           // one new point at the centre, fanned
+patchLoops(result, { maxEdges: 50 });                   // every loop up to 50 edges
+// -> { added, refused: [{ loop, reason }] }
+```
+
+A loop is refused, never thrown on, when it runs along a break line, isn't simple, or would give an edge a third triangle. `fillGaps` (automatic, loops of 6 edges or fewer) and `closeHoles` (opt-in, centroid fans) use the same per-loop code. In the demo, tick **patch loops**, click near a red loop, then press **Patch selected** or Enter.
+
 ### Raw scans need thinning and denoising
 
 Scanners sample densely along scan lines, often about 1 mm apart, and LAS files round coordinates (often to 1 mm). A point's nearest neighbours then lie on one line, and no plane fits them. Use `thin` to even out the spacing (it calls las-laz-js `dedupe`). Then use `denoise` to bring the noise well below the spacing (it calls las-laz-js `denoisePoints`).

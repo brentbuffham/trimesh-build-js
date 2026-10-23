@@ -133,6 +133,10 @@ export function buildMesh(cols, options) {
 		pool: bms.pool,
 		soup: bms.soup,
 		origin: cloud.origin,
+		// kept for patchLoop / patchLoops: break line edges (pool ids) and origin-shifted viewpoints
+		constraintPoolEdges: bms.constraintPoolEdges,
+		constrainedPairs: bms.constrainedPairs,
+		viewpoints: viewpoints,
 		mesh: mesh,
 		unfilledLoops: unfilled,
 		report: {
