@@ -114,7 +114,8 @@ function finiteOr(o, name) {
  * @param {Object} cols - las-laz-js columns: { count, positions } or { count, x, y, z }.
  *   Float64: world coordinates. Float32: already shifted by options.origin (required).
  * @param {{origin?: {x: number, y: number, z: number}, normals?: Float32Array, tolerance?: number,
- *   k?: number, maxRadiusMultiplier?: number}} [options]
+ *   k?: number, maxRadiusMultiplier?: number, minSpacing?: number}} [options] - minSpacing: no two
+ *   points are closer than this (already thinned), so merge passes below it are skipped
  * @returns {PreparedCloud}
  */
 export function prepareCloud(cols, options) {
@@ -160,12 +161,17 @@ export function prepareCloud(cols, options) {
 	// other's kNN slots. Both merges are 3D and happen before the index and normals.
 	var normals = opts.normals;
 	var total = n;
-	var c0 = compact(coords, normals, dedupeSelection(xyzOf(coords, n), DISTINCT, { z: true }).keep);
+	// minSpacing: the caller already thinned to this (buildMesh thin), so no
+	// two points are closer and a merge pass below it would find nothing.
+	var minSpacing = opts.minSpacing > 0 ? opts.minSpacing : 0;
+	var c0 = minSpacing > 0 ? { coords: coords, normals: normals, count: n }
+		: compact(coords, normals, dedupeSelection(xyzOf(coords, n), DISTINCT, { z: true }).keep);
 	coords = c0.coords; normals = c0.normals; n = c0.count;
 	var medianSpacing = estimateMedianSpacing(buildIndex({ count: n, positions: coords }), coords, n);
 	if (n < 3 || !(medianSpacing > 0)) throw bad(ERROR_CODES.TOO_FEW_POINTS, "only " + n + " distinct points");
 	var tolerance = opts.tolerance !== undefined ? opts.tolerance : Math.max(MIN_TOLERANCE, 0.25 * medianSpacing);
-	var c1 = compact(coords, normals, dedupeSelection(xyzOf(coords, n), tolerance, { z: true }).keep);
+	var c1 = tolerance <= minSpacing ? { coords: coords, normals: normals, count: n }
+		: compact(coords, normals, dedupeSelection(xyzOf(coords, n), tolerance, { z: true }).keep);
 	var spacingChanged = c1.count !== n;
 	coords = c1.coords; normals = c1.normals; n = c1.count;
 	var merged = total - n;

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Faster after `thin`:** `prepareCloud` skips its duplicate-merge passes when the cloud is already thinned (new option `minSpacing`). That saves about 2.4 s per 1M points.
+
 - **`buildMeshAsync(cols, { workers, createWorker })`** spreads triangulation over worker threads and gives the same mesh as `buildMesh`. Worker scripts: `trimesh-build-js/worker/browser` and `trimesh-build-js/worker/node`. New exports `proposeTriangles` and `acceptProposals`.
 - **Faster vote counting:** typed-array hash tables, no string keys. At 1M points, 9.6 s → 1.1 s.
 - **Result at 1M points:** 55 s → 39 s on one thread, 25 s with workers.

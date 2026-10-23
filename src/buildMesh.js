@@ -102,7 +102,7 @@ function prepareStages(cols, options) {
 		// Smooth in origin-shifted coordinates. The first pass only finds the
 		// origin and spacing (zero normals skip the normal fit); the second
 		// prepares the smoothed points and keeps the first pass's origin.
-		var first = prepareCloud(input, Object.assign({}, opts, { normals: new Float32Array(3 * input.count) }));
+		var first = prepareCloud(input, Object.assign({}, opts, { normals: new Float32Array(3 * input.count), minSpacing: opts.thin || 0 }));
 		var d = opts.denoise === true ? {} : opts.denoise;
 		var smoothed = denoisePoints({ count: first.count, positions: first.coords }, {
 			method: d.method || "bilateral",
@@ -115,7 +115,7 @@ function prepareStages(cols, options) {
 		cloud.origin = first.origin;
 	} else {
 		report("prepare", 0);
-		cloud = prepareCloud(input, opts);
+		cloud = prepareCloud(input, Object.assign({}, opts, { minSpacing: opts.thin || 0 }));
 	}
 	var tolerance = cloud.tolerance;
 

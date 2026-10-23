@@ -74,6 +74,22 @@ describe("prepareCloud", function () {
 		}
 	});
 
+	it("minSpacing (already thinned) gives the same cloud", function () {
+		var cols = planarGrid(40, 40, 0.5);
+		var a = prepareCloud(cols, { origin: { x: 0, y: 0, z: 0 } });
+		var b = prepareCloud(cols, { origin: { x: 0, y: 0, z: 0 }, minSpacing: 0.5 });
+		expect(b.count).toBe(a.count);
+		expect(Array.from(b.coords)).toEqual(Array.from(a.coords));
+		expect(b.tolerance).toBe(a.tolerance);
+	});
+
+	it("minSpacing below the tolerance still merges at the tolerance", function () {
+		var g = planarGrid(20, 20, 0.5);
+		var p = Array.from(g.positions).concat([2.01, 2, 0]);
+		var c = prepareCloud({ count: p.length / 3, positions: Float64Array.from(p) }, { origin: { x: 0, y: 0, z: 0 }, minSpacing: 0.005, tolerance: 0.05 });
+		expect(c.mergedAtTolerance).toBe(1);
+	});
+
 	it("caller normals are used as given", function () {
 		var cols = fibonacciSphere(300, 5);
 		var normals = new Float32Array(3 * cols.count).fill(0);
