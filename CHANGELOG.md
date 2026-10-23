@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **Depends on las-laz-js ^0.9.1.**
+- **`buildMeshAsync` fits normals on the workers too,** one slice per worker with `pointNormals({ start, end })`. Each slice matches a full run bit for bit, so the mesh is unchanged. There is a new progress stage, `normals`.
+- **`prepareCloud` option `deferNormals`,** and `cloud.normalOptions`.
+- **WALL.las** (4.3M points, thin 0.1 m to give 1.44M, 8 workers): 38.6 s → 33.7 s.
+
 ## 0.3.0 (2026-10-24)
 
 - **Depends on trimesh-boolean ^0.7.7.** Its vertex pool uses numeric cell keys: 2M lookups take 6.6 s instead of 30.4 s.

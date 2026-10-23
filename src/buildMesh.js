@@ -11,7 +11,7 @@
 // before and after are the same code (prepareStages, finishStages).
 //=============================================================
 
-import { dedupe, denoisePoints, buildIndex } from "las-laz-js";
+import { dedupe, denoisePoints, buildIndex, pointNormals } from "las-laz-js";
 import { prepareCloud, estimateMedianSpacing } from "./input/prepareCloud.js";
 import { insertConstraints, EMPTY_CONSTRAINTS } from "./constraints/insertConstraints.js";
 import { RECONSTRUCTORS } from "./reconstruct/index.js";
@@ -78,13 +78,14 @@ function shiftPoint(p, o) {
 
 // Everything before the reconstructor: options, thin, denoise, prepare,
 // break lines. Shared by buildMesh and buildMeshAsync.
-function prepareStages(cols, options) {
+function prepareStages(cols, options, deferNormals) {
 	var opts = Object.assign({}, DEFAULT_OPTIONS, options || {});
 	var reconstruct = RECONSTRUCTORS[opts.algorithm];
 	if (!reconstruct) throw new TrimeshBuildError(ERROR_CODES.INVALID_INPUT, "unknown algorithm " + String(opts.algorithm));
 
-	// onProgress(stage, fraction): stages thin, denoise, prepare, reconstruct,
-	// weld, orient, done. Fractions run 0..1 within a stage.
+	// onProgress(stage, fraction): stages thin, denoise, prepare, [normals,
+	// buildMeshAsync only] reconstruct, weld, orient, done. Fractions run 0..1
+	// within a stage.
 	var report = typeof opts.onProgress === "function" ? opts.onProgress : function () {};
 
 	var pointsInput = cols && cols.count;
@@ -111,11 +112,11 @@ function prepareStages(cols, options) {
 			maxDistance: d.maxDistance || 5 * first.medianSpacing
 		});
 		report("prepare", 0);
-		cloud = prepareCloud({ count: first.count, positions: smoothed.positions }, Object.assign({}, opts, { origin: { x: 0, y: 0, z: 0 } }));
+		cloud = prepareCloud({ count: first.count, positions: smoothed.positions }, Object.assign({}, opts, { origin: { x: 0, y: 0, z: 0 }, deferNormals: !!deferNormals }));
 		cloud.origin = first.origin;
 	} else {
 		report("prepare", 0);
-		cloud = prepareCloud(input, Object.assign({}, opts, { minSpacing: opts.thin || 0 }));
+		cloud = prepareCloud(input, Object.assign({}, opts, { minSpacing: opts.thin || 0, deferNormals: !!deferNormals }));
 	}
 	var tolerance = cloud.tolerance;
 
@@ -233,11 +234,16 @@ export async function buildMeshAsync(cols, options) {
 	var opts = options || {};
 	var workers = opts.workers | 0;
 	if (workers < 2 || typeof opts.createWorker !== "function") return buildMesh(cols, opts);
-	var s = prepareStages(cols, opts);
-	s.report("reconstruct", 0);
-	var rec = s.opts.algorithm === "localDelaunay"
-		? await reconstructInWorkers(s, workers, opts.createWorker)
-		: s.reconstruct(s.cloud, s.constraints, s.opts);
+	// Normals are fitted on the workers too, unless the caller supplied them
+	var s = prepareStages(cols, opts, !opts.normals);
+	var rec;
+	if (s.opts.algorithm === "localDelaunay") {
+		rec = await reconstructInWorkers(s, workers, opts.createWorker);
+	} else {
+		if (!s.cloud.normals) s.cloud.normals = pointNormals({ count: s.cloud.count, positions: s.cloud.coords }, s.cloud.normalOptions).normal;
+		s.report("reconstruct", 0);
+		rec = s.reconstruct(s.cloud, s.constraints, s.opts);
+	}
 	return finishStages(s, rec);
 }
 
@@ -252,8 +258,12 @@ function listen(w, onMessage, onError) {
 	}
 }
 
-// Hand out ranges of about 1/(8 x workers) of the points, so faster workers
-// take more and progress moves smoothly; vote when every range is back.
+// One pool of workers for both phases:
+//   normals - one slice per worker (each slice builds its own k-d tree once);
+//             the assembled normals go back to every worker
+//   propose - ranges of about 1/(8 x workers) of the points, so faster
+//             workers take more and progress moves smoothly
+// Then vote on this thread.
 function reconstructInWorkers(s, workers, createWorker) {
 	var cloud = s.cloud, constraints = s.constraints;
 	var n = cloud.count;
@@ -262,6 +272,8 @@ function reconstructInWorkers(s, workers, createWorker) {
 	for (var from = 0; from < n; from += size) ranges.push([from, Math.min(n, from + size)]);
 	var init = proposeInitMessage(cloud, constraints, s.opts);
 	var pool = [], parts = [], next = 0, done = 0, failed = false;
+	var count = Math.min(workers, ranges.length);
+	var needNormals = !cloud.normals, slicesBack = 0;
 
 	return new Promise(function (resolve, reject) {
 		function finish(err) {
@@ -276,21 +288,45 @@ function reconstructInWorkers(s, workers, createWorker) {
 			var r = ranges[next++];
 			w.postMessage({ type: "range", from: r[0], to: r[1] });
 		}
-		var count = Math.min(workers, ranges.length);
-		for (var i = 0; i < count; i++) {
-			(function (w) {
-				pool.push(w);
-				listen(w, function (m) {
-					if (failed || m.type !== "proposals") return;
-					parts.push(m);
-					done++;
-					s.report("reconstruct", done / ranges.length);
-					if (done === ranges.length) finish(null);
-					else feed(w);
-				}, function (err) { if (!failed) finish(err); });
-				w.postMessage(init);
+		function startProposing() {
+			s.report("reconstruct", 0);
+			pool.forEach(function (w) {
+				if (needNormals) w.postMessage({ type: "setNormals", normals: cloud.normals });
 				feed(w);
-			})(createWorker());
+			});
 		}
+		function onMessage(w, m) {
+			if (failed) return;
+			if (m.type === "normals") {
+				cloud.normals.set(m.normal, 3 * m.start);
+				slicesBack++;
+				s.report("normals", slicesBack / count);
+				if (slicesBack === count) startProposing();
+				return;
+			}
+			if (m.type !== "proposals") return;
+			parts.push(m);
+			done++;
+			s.report("reconstruct", done / ranges.length);
+			if (done === ranges.length) finish(null);
+			else feed(w);
+		}
+		if (needNormals) {
+			s.report("normals", 0);
+			cloud.normals = new Float32Array(3 * n);
+		}
+		var slice = Math.ceil(n / count);
+		for (var i = 0; i < count; i++) {
+			(function (w, k) {
+				pool.push(w);
+				listen(w, function (m) { onMessage(w, m); }, function (err) { if (!failed) finish(err); });
+				w.postMessage(init);
+				if (needNormals) {
+					var o = cloud.normalOptions;
+					w.postMessage({ type: "normals", start: k * slice, end: Math.min(n, (k + 1) * slice), k: o.k, maxDistance: o.maxDistance });
+				}
+			})(createWorker(), i);
+		}
+		if (!needNormals) startProposing();
 	});
 }

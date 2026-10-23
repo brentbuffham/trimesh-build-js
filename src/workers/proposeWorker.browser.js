@@ -9,5 +9,5 @@ import { createProposeHandler } from "./proposeHandler.js";
 var handler = createProposeHandler();
 self.onmessage = function (e) {
 	var reply = handler.handle(e.data);
-	if (reply) self.postMessage(reply, [reply.proposals.buffer]);
+	if (reply) self.postMessage(reply, [(reply.proposals || reply.normal).buffer]);
 };

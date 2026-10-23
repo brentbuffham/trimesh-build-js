@@ -90,6 +90,16 @@ describe("prepareCloud", function () {
 		expect(c.mergedAtTolerance).toBe(1);
 	});
 
+	it("deferNormals skips the fit and reports its options", function () {
+		var cols = fibonacciSphere(2000, 5);
+		var full = prepareCloud(cols, {});
+		var d = prepareCloud(cols, { deferNormals: true });
+		expect(d.normals).toBeNull();
+		expect(d.normalOptions).toEqual(full.normalOptions);
+		expect(d.normalOptions.k).toBe(20);
+		expect(d.normalOptions.maxDistance).toBeGreaterThan(0);
+	});
+
 	it("caller normals are used as given", function () {
 		var cols = fibonacciSphere(300, 5);
 		var normals = new Float32Array(3 * cols.count).fill(0);

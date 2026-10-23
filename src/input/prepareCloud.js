@@ -28,7 +28,8 @@ var MIN_TOLERANCE = 0.001;  // 1 mm floor on the default weld tolerance
  * @property {{x: number, y: number, z: number}} origin
  * @property {{min: number[], max: number[]}} bounds - shifted
  * @property {Object} index - las-laz-js PointIndex over coords
- * @property {Float32Array} normals - 3 per point; sign not meaningful
+ * @property {Float32Array|null} normals - 3 per point; sign not meaningful (null with deferNormals)
+ * @property {{k: number, maxDistance: number}} normalOptions - the pointNormals options used (or to use)
  * @property {number} medianSpacing - of distinct points
  * @property {number} tolerance - weld distance (default max(1 mm, 0.25 x spacing))
  * @property {number} mergedAtTolerance - input points merged into a neighbour closer than tolerance
@@ -114,7 +115,7 @@ function finiteOr(o, name) {
  * @param {Object} cols - las-laz-js columns: { count, positions } or { count, x, y, z }.
  *   Float64: world coordinates. Float32: already shifted by options.origin (required).
  * @param {{origin?: {x: number, y: number, z: number}, normals?: Float32Array, tolerance?: number,
- *   k?: number, maxRadiusMultiplier?: number, minSpacing?: number}} [options] - minSpacing: no two
+ *   k?: number, maxRadiusMultiplier?: number, minSpacing?: number, deferNormals?: boolean}} [options] - minSpacing: no two
  *   points are closer than this (already thinned), so merge passes below it are skipped
  * @returns {PreparedCloud}
  */
@@ -189,12 +190,10 @@ export function prepareCloud(cols, options) {
 	var index = buildIndex(shifted);
 	if (spacingChanged) medianSpacing = estimateMedianSpacing(index, coords, n);
 
-	if (!normals) {
-		// k = 20 reaches about 2.5 spacings; 4x the cull multiple leaves room
-		var k = opts.k || 20;
-		var mult = opts.maxRadiusMultiplier || 3;
-		normals = pointNormals(shifted, { k: k, maxDistance: mult * medianSpacing * 4 }).normal;
-	}
+	// k = 20 reaches about 2.5 spacings; 4x the cull multiple leaves room
+	var normalOptions = { k: opts.k || 20, maxDistance: (opts.maxRadiusMultiplier || 3) * medianSpacing * 4 };
+	// deferNormals: the caller fits them (buildMeshAsync splits the fit across workers)
+	if (!normals && !opts.deferNormals) normals = pointNormals(shifted, normalOptions).normal;
 
 	return {
 		coords: coords,
@@ -202,9 +201,10 @@ export function prepareCloud(cols, options) {
 		origin: origin,
 		bounds: { min: min, max: max },
 		index: index,
-		normals: normals,
+		normals: normals || null,
 		medianSpacing: medianSpacing,
 		tolerance: tolerance,
-		mergedAtTolerance: merged
+		mergedAtTolerance: merged,
+		normalOptions: normalOptions
 	};
 }

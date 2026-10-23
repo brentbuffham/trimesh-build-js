@@ -4,16 +4,19 @@
 //=============================================================
 // Shared by proposeWorker.browser.js and proposeWorker.node.js.
 // Messages:
-//   { type: "init", cloud, constraints, options }  (once per build)
-//   { type: "range", from, to }                    (any number)
-// Replies to "range" with
-//   { type: "proposals", from, to, proposals, used, skipped, failures }
+//   { type: "init", cloud, constraints, options }  (once per build; cloud.normals may be null)
+//   { type: "normals", start, end, k, maxDistance } (fit normals for a slice)
+//   { type: "setNormals", normals }               (the whole cloud's normals)
+//   { type: "range", from, to }                    (any number, after normals)
+// Replies:
+//   "normals" -> { type: "normals", start, end, normal }
+//   "range"   -> { type: "proposals", from, to, proposals, used, skipped, failures }
 // The cloud arrives as plain typed arrays; the neighbour indices are
 // rebuilt here (las-laz-js buildIndex) because they hold no functions
 // but are cheaper to rebuild than to copy.
 //=============================================================
 
-import { buildIndex } from "las-laz-js";
+import { buildIndex, pointNormals } from "las-laz-js";
 import { proposeTriangles } from "../reconstruct/localDelaunay/run.js";
 import { vertexCoordsOf } from "../reconstruct/vertexCoords.js";
 
@@ -27,7 +30,7 @@ import { vertexCoordsOf } from "../reconstruct/vertexCoords.js";
 export function proposeInitMessage(cloud, constraints, options) {
 	return {
 		type: "init",
-		cloud: { coords: cloud.coords, count: cloud.count, normals: cloud.normals },
+		cloud: { coords: cloud.coords, count: cloud.count, normals: cloud.normals || null },
 		constraints: {
 			firstId: constraints.firstId,
 			count: constraints.count,
@@ -74,6 +77,15 @@ export function createProposeHandler() {
 				};
 				options = m.options;
 				vc = vertexCoordsOf(cloud, constraints);
+				return null;
+			}
+			if (m.type === "normals") {
+				// las-laz-js 0.9.1: a slice of a full run, bit for bit (neighbours from the whole cloud)
+				var fit = pointNormals({ count: cloud.count, positions: cloud.coords }, { k: m.k, maxDistance: m.maxDistance, start: m.start, end: m.end });
+				return { type: "normals", start: m.start, end: m.end, normal: fit.normal };
+			}
+			if (m.type === "setNormals") {
+				cloud.normals = m.normals;
 				return null;
 			}
 			if (m.type === "range") {
