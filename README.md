@@ -6,6 +6,8 @@ The output is a BMS (Brent's Mega Soup) pair from [trimesh-boolean](https://gith
 
 Vanilla JavaScript, ES modules, no WASM. Depends on las-laz-js, delaunator, @kninnug/constrainautor and trimesh-boolean.
 
+**Live demo:** [brentbuffham.github.io/trimesh-build-js](https://brentbuffham.github.io/trimesh-build-js/). It meshes synthetic voids, the bundled Wookey Hole cave, or your own LAS/LAZ file in the browser, and shows open loops, break line edges, non-manifold edges and which way the normals face. The source is in `examples/`; run `npm run dev` to work on it locally.
+
 ## How it works
 
 Every point gets a local patch:
