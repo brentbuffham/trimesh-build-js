@@ -25,7 +25,7 @@
 //=============================================================
 
 import { triangulateLoop } from "trimesh-boolean";
-import { buildEdgeMap, poolEdgeKey } from "../bms/edges.js";
+import { edgesOf, markCurrent, poolEdgeKey } from "../bms/edges.js";
 import { orientMesh } from "../bms/orientMesh.js";
 import { validateMesh } from "../validate/validateMesh.js";
 
@@ -39,7 +39,7 @@ function runs(t, a, b) {
  * Patch one loop of PoolVertex ids into bms.soup. The caller re-orients
  * (orientMesh) and re-validates afterwards.
  * @param {{pool: Object, soup: Array<Object>, constraintPoolEdges?: Set<string>}} bms - soup is appended to
- * @param {Map<string, number[]>} edges - buildEdgeMap(bms.soup), kept up to date here
+ * @param {import("../bms/edges.js").EdgeTable} edges - edgesOf(bms), kept up to date here (call markCurrent after)
  * @param {number[]} loop - PoolVertex ids in order, not repeated at the end
  * @param {"auto"|"fan"|"centroid"|"vertexFan"} method - auto tries fan, centroid, vertexFan
  * @returns {{added: number, reason: string|null, method: string|null}} method actually used
@@ -49,8 +49,7 @@ export function patchLoopIds(bms, edges, loop, method) {
 	var byId = bms.pool.getAll();
 	var n = loop.length;
 	function faces(a, b) {
-		var l = edges.get(poolEdgeKey(a, b));
-		return l ? l.length : 0;
+		return edges.count(poolEdgeKey(a, b));
 	}
 
 	if (n < 3) return { added: 0, reason: "a loop needs at least 3 vertices" };
@@ -127,9 +126,9 @@ export function patchLoopIds(bms, edges, loop, method) {
 		var tri = tris[f], vs = [tri.v0.id, tri.v1.id, tri.v2.id];
 		for (var s = 0; s < 3; s++) {
 			var ea = vs[s], eb = vs[(s + 1) % 3];
-			var list = onLoop.has(poolEdgeKey(ea, eb)) ? edges.get(poolEdgeKey(ea, eb)) : null;
-			if (!list) continue;
-			if (runs(bms.soup[list[0]], ea, eb)) { var x = tri.v1; tri.v1 = tri.v2; tri.v2 = x; }
+			var ek = poolEdgeKey(ea, eb);
+			if (!onLoop.has(ek) || edges.count(ek) === 0) continue;
+			if (runs(bms.soup[edges.tri(ek, 0)], ea, eb)) { var x = tri.v1; tri.v1 = tri.v2; tri.v2 = x; }
 			break;
 		}
 	}
@@ -140,8 +139,7 @@ export function patchLoopIds(bms, edges, loop, method) {
 		var nv = [nt.v0.id, nt.v1.id, nt.v2.id];
 		for (var z = 0; z < 3; z++) {
 			var key = poolEdgeKey(nv[z], nv[(z + 1) % 3]);
-			if (!edges.has(key)) edges.set(key, []);
-			edges.get(key).push(nt.origIdx);
+			edges.add(key, nt.origIdx);
 		}
 	}
 	return { added: tris.length, reason: null, method: used };
@@ -184,13 +182,10 @@ function methodOf(options) {
 	return m && METHODS[m] ? m : "auto";
 }
 
+// A buildMesh result carries everything a bms needs (pool, soup, break
+// line edges) and the cached edge map, so it is used as one directly.
 function bmsOf(result) {
-	return {
-		pool: result.pool,
-		soup: result.soup,
-		constraintPoolEdges: result.constraintPoolEdges,
-		constrainedPairs: result.constrainedPairs
-	};
+	return result;
 }
 
 function refresh(result, bms) {
@@ -213,7 +208,9 @@ export function patchLoop(result, loop, options) {
 	var r = resolveLoop(result, loop);
 	if (!r.ids) return { added: 0, method: null, refused: [{ loop: loop, reason: r.reason }] };
 	var bms = bmsOf(result);
-	var p = patchLoopIds(bms, buildEdgeMap(bms.soup), r.ids, method);
+	var edges = edgesOf(bms);
+	var p = patchLoopIds(bms, edges, r.ids, method);
+	markCurrent(bms, edges);
 	if (p.reason) return { added: 0, method: null, refused: [{ loop: loop, reason: p.reason }] };
 	refresh(result, bms);
 	return { added: p.added, method: p.method, refused: [] };
@@ -231,7 +228,7 @@ export function patchLoops(result, options) {
 	var method = methodOf(opts);
 	var maxEdges = opts.maxEdges !== undefined ? opts.maxEdges : Infinity;
 	var bms = bmsOf(result);
-	var edges = buildEdgeMap(bms.soup);
+	var edges = edgesOf(bms);
 	var added = 0, patched = 0, refused = [];
 	var methods = { fan: 0, centroid: 0, vertexFan: 0 };
 	var loops = opts.loops || result.mesh.boundaryLoops.filter(function (l) { return l.length <= maxEdges; });
@@ -242,6 +239,7 @@ export function patchLoops(result, options) {
 		if (p.reason) refused.push({ loop: loops[i], reason: p.reason });
 		else { added += p.added; patched++; methods[p.method]++; }
 	}
+	markCurrent(bms, edges);
 	if (patched > 0) refresh(result, bms);
 	return { added: added, patched: patched, methods: methods, refused: refused };
 }

@@ -16,7 +16,7 @@
 //   - the centroid lands on an existing vertex.
 //=============================================================
 
-import { buildEdgeMap } from "../bms/edges.js";
+import { edgesOf, markCurrent } from "../bms/edges.js";
 import { patchLoopIds } from "./patchLoop.js";
 
 /**
@@ -27,7 +27,7 @@ import { patchLoopIds } from "./patchLoop.js";
  */
 export function closeHoles(bms, mesh, options) {
 	var maxLoopEdges = options && options.maxLoopEdges !== undefined ? options.maxLoopEdges : 200;
-	var edges = buildEdgeMap(bms.soup);
+	var edges = edgesOf(bms);
 	var added = 0, unfilled = [];
 	var loops = mesh.boundaryLoops || [];
 	for (var i = 0; i < loops.length; i++) {
@@ -36,5 +36,6 @@ export function closeHoles(bms, mesh, options) {
 		if (p.reason) unfilled.push(loops[i]);
 		else added += p.added;
 	}
+	markCurrent(bms, edges);
 	return { added: added, unfilledLoops: unfilled };
 }

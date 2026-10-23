@@ -11,7 +11,7 @@
 // A constraint whose ends welded together is reported, not hidden.
 //=============================================================
 
-import { buildEdgeMap, poolEdgeKey } from "./edges.js";
+import { edgesOf, poolEdgeKey } from "./edges.js";
 
 /**
  * @param {{pool: Object, soup: Array<Object>, idToPool: Array<Object>}} bms - mutated
@@ -30,25 +30,29 @@ export function cleanSoup(bms, constraints) {
 	}
 
 	var kept = [], degenerate = 0, duplicates = 0;
-	var faces = new Set();
+	// duplicate test on sorted ids: (lo, mid) -> the high ids seen with them
+	var faces = new Map();
 	for (var t = 0; t < bms.soup.length; t++) {
 		var tri = bms.soup[t];
 		var a = tri.v0.id, b = tri.v1.id, c = tri.v2.id;
 		if (a === b || b === c || a === c) { degenerate++; continue; }
-		var s = [a, b, c].sort(function (x, y) { return x - y; }).join(",");
-		if (faces.has(s)) { duplicates++; continue; }
-		faces.add(s);
+		var lo = Math.min(a, b, c), hi = Math.max(a, b, c), mid = a + b + c - lo - hi;
+		var k = poolEdgeKey(lo, mid), seen = faces.get(k);
+		if (seen === undefined) faces.set(k, hi);
+		else if (seen === hi || (Array.isArray(seen) && seen.indexOf(hi) >= 0)) { duplicates++; continue; }
+		else if (Array.isArray(seen)) seen.push(hi);
+		else faces.set(k, [seen, hi]);
 		tri.origIdx = kept.length;
 		kept.push(tri);
 	}
 	bms.soup.length = 0;
 	for (var k = 0; k < kept.length; k++) bms.soup.push(kept[k]);
 
-	var edges = buildEdgeMap(bms.soup);
+	var edges = edgesOf(bms);
 	var boundary = 0, nonManifold = 0;
-	edges.forEach(function (list) {
-		if (list.length === 1) boundary++;
-		else if (list.length > 2) nonManifold++;
+	edges.forEach(function (n) {
+		if (n === 1) boundary++;
+		else if (n > 2) nonManifold++;
 	});
 
 	var segs = constraints.segments || new Uint32Array(0);

@@ -14,7 +14,7 @@
 // afterwards to make the new triangles' winding agree.
 //=============================================================
 
-import { buildEdgeMap } from "../bms/edges.js";
+import { edgesOf, markCurrent } from "../bms/edges.js";
 import { patchLoopIds } from "./patchLoop.js";
 
 /**
@@ -25,7 +25,7 @@ import { patchLoopIds } from "./patchLoop.js";
  */
 export function fillGaps(bms, mesh, maxGapEdges) {
 	if (!(maxGapEdges >= 3)) return { filled: 0, triangles: 0 };
-	var edges = buildEdgeMap(bms.soup);
+	var edges = edgesOf(bms);
 	var filled = 0, added = 0;
 	var loops = mesh.boundaryLoops || [];
 	for (var i = 0; i < loops.length; i++) {
@@ -33,5 +33,6 @@ export function fillGaps(bms, mesh, maxGapEdges) {
 		var p = patchLoopIds(bms, edges, loops[i], "auto");
 		if (!p.reason) { filled++; added += p.added; }
 	}
+	markCurrent(bms, edges);
 	return { filled: filled, triangles: added };
 }

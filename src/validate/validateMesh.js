@@ -17,7 +17,7 @@
 //=============================================================
 
 import { computeSignedVolume } from "trimesh-boolean";
-import { buildEdgeMap, poolEdgeKey } from "../bms/edges.js";
+import { edgesOf, poolEdgeKey } from "../bms/edges.js";
 
 /**
  * @typedef {Object} MeshResult
@@ -42,9 +42,9 @@ function traceLoops(soup, edges) {
 		if (!adj.has(a)) adj.set(a, []);
 		adj.get(a).push({ to: b, key: key, forward: forward });
 	}
-	edges.forEach(function (list, key) {
-		if (list.length !== 1) return;
-		var t = soup[list[0]];
+	edges.forEach(function (n, key, t0) {
+		if (n !== 1) return;
+		var t = soup[t0];
 		var vs = [t.v0.id, t.v1.id, t.v2.id];
 		for (var e = 0; e < 3; e++) {
 			var a = vs[e], b = vs[(e + 1) % 3];
@@ -109,9 +109,9 @@ function splitSelfTouching(loop) {
 // Interior edges whose two triangles run them the same way
 function countConflicts(soup, edges) {
 	var n = 0;
-	edges.forEach(function (list, key) {
-		if (list.length !== 2) return;
-		var dirs = list.map(function (ti) {
+	edges.forEach(function (faces, key, t0, t1) {
+		if (faces !== 2) return;
+		var dirs = [t0, t1].map(function (ti) {
 			var t = soup[ti], vs = [t.v0.id, t.v1.id, t.v2.id];
 			for (var e = 0; e < 3; e++) if (poolEdgeKey(vs[e], vs[(e + 1) % 3]) === key) return vs[e];
 			return -1;
@@ -128,14 +128,14 @@ function countConflicts(soup, edges) {
  */
 export function validateMesh(bms, orientation) {
 	var soup = bms.soup;
-	var edges = buildEdgeMap(soup);
+	var edges = edgesOf(bms);
 	var cons = bms.constraintPoolEdges || new Set();
 	var oneFace = 0, boundary = 0, nonManifold = 0;
-	edges.forEach(function (list, key) {
-		if (list.length === 1) {
+	edges.forEach(function (n, key) {
+		if (n === 1) {
 			oneFace++;
 			if (!cons.has(key)) boundary++;
-		} else if (list.length > 2) nonManifold++;
+		} else if (n > 2) nonManifold++;
 	});
 	var closed = soup.length > 0 && oneFace === 0 && nonManifold === 0;
 	var constrainedEdges = (bms.constrainedPairs || []).filter(function (p) {

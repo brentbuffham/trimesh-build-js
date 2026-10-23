@@ -161,7 +161,7 @@ export function buildMesh(cols, options) {
 	}
 	report("done", 1);
 
-	return {
+	var result = {
 		pool: bms.pool,
 		soup: bms.soup,
 		origin: cloud.origin,
@@ -194,4 +194,7 @@ export function buildMesh(cols, options) {
 			holesFilledTriangles: filled
 		}
 	};
+	// the shared edge map travels with the result, for patchLoop (not enumerable)
+	if (bms._edges) Object.defineProperty(result, "_edges", { value: bms._edges, writable: true, configurable: true, enumerable: false });
+	return result;
 }

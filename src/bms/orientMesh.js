@@ -16,7 +16,7 @@
 //=============================================================
 
 import { computeSignedVolume } from "trimesh-boolean";
-import { buildEdgeMap, poolEdgeKey } from "./edges.js";
+import { edgesOf, poolEdgeKey } from "./edges.js";
 
 function flip(t) {
 	var x = t.v1; t.v1 = t.v2; t.v2 = x;
@@ -60,7 +60,7 @@ function viewpointScore(soup, tris, viewpoints) {
  */
 export function orientMesh(bms, viewpoints) {
 	var soup = bms.soup;
-	var edges = buildEdgeMap(soup);
+	var edges = edgesOf(bms);
 	var comp = new Int32Array(soup.length).fill(-1);
 	var perComponent = [];
 	var hasViews = Array.isArray(viewpoints) && viewpoints.length > 0;
@@ -77,9 +77,10 @@ export function orientMesh(bms, viewpoints) {
 			var vs = [t.v0.id, t.v1.id, t.v2.id];
 			for (var e = 0; e < 3; e++) {
 				var a = vs[e], b = vs[(e + 1) % 3];
-				var list = edges.get(poolEdgeKey(a, b));
-				if (list.length !== 2) { closed = false; continue; }
-				var nj = list[0] === ti ? list[1] : list[0];
+				var key = poolEdgeKey(a, b);
+				if (edges.count(key) !== 2) { closed = false; continue; }
+				var f0 = edges.tri(key, 0), f1 = edges.tri(key, 1);
+				var nj = f0 === ti ? f1 : f0;
 				var other = soup[nj];
 				// The current triangle may have been flipped since vs was read;
 				// re-read its direction on this edge.
