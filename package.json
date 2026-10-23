@@ -1,0 +1,48 @@
+{
+	"name": "trimesh-build",
+	"version": "0.1.0",
+	"description": "Reconstruct open or closed triangle meshes from point clouds (caves, drives, voids) with optional break lines, as a trimesh-boolean BMS soup.",
+	"type": "module",
+	"main": "./src/index.js",
+	"exports": {
+		".": "./src/index.js"
+	},
+	"files": [
+		"src/",
+		"LICENSE",
+		"README.md"
+	],
+	"sideEffects": false,
+	"engines": {
+		"node": ">=22"
+	},
+	"scripts": {
+		"test": "vitest run"
+	},
+	"keywords": [
+		"mesh",
+		"point-cloud",
+		"surface-reconstruction",
+		"delaunay",
+		"cave",
+		"tunnel",
+		"cavity",
+		"mining",
+		"trimesh"
+	],
+	"author": "Brent Buffham (https://kirra-design.com)",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/brentbuffham/trimesh-build-js.git"
+	},
+	"dependencies": {
+		"@kninnug/constrainautor": "^4.1.0",
+		"delaunator": "^5.1.0",
+		"las-laz-js": "^0.7.1",
+		"trimesh-boolean": "^0.7.6"
+	},
+	"devDependencies": {
+		"vitest": "^3.2.4"
+	}
+}
