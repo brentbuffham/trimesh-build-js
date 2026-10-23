@@ -194,7 +194,9 @@ function readOptions(src) {
 	var o = {
 		k: num("k"), minVotes: num("minVotes"), normalAgreement: num("normalAgreement"),
 		maxPlaneOffset: num("maxPlaneOffset"), maxGapEdges: num("maxGapEdges"),
-		breaklines: src.breaklines
+		breaklines: src.breaklines,
+		// a tab has about 4 GB; v0.2 needs about 4 GB per 1M points after thinning
+		maxPoints: MAX_BUILD_POINTS
 	};
 	if (num("thin") > 0) o.thin = num("thin");
 	if (num("denoise") > 0) o.denoise = { iterations: num("denoise") };
@@ -204,7 +206,8 @@ function readOptions(src) {
 }
 
 // ── Worker ──
-var LARGE = 1000000;  // above this, a build without thinning is refused
+var LARGE = 1000000;            // above this, a build without thinning is refused
+var MAX_BUILD_POINTS = 600000;  // points left after thinning that a tab can mesh
 var worker = null;
 var busy = false;
 var buildStart = 0;
@@ -227,7 +230,16 @@ function makeWorker() {
 			return;
 		}
 		overlay(false);
-		if (m.type === "error") { status((m.code ? m.code + ": " : "") + m.message); return; }
+		if (m.type === "error") {
+			if (m.code === "TOO_MANY_POINTS" && m.suggestedThin) {
+				// The cloud is still in the worker: one press of Build tries again
+				$("thin").value = String(m.suggestedThin);
+				status(m.message + " Thin is now " + m.suggestedThin + ": press Build.");
+				return;
+			}
+			status((m.code ? m.code + ": " : "") + m.message);
+			return;
+		}
 		if (m.type === "exported") { saveObj(m.positions, m.index); return; }
 		last = m.data;
 		clearLoopSelection();

@@ -136,6 +136,6 @@ self.onmessage = function (e) {
 			self.postMessage({ type: "exported", positions: ix.positions, index: ix.index }, [ix.positions.buffer, ix.index.buffer]);
 		}
 	} catch (err) {
-		self.postMessage({ type: "error", code: err.code || null, message: err.message });
+		self.postMessage({ type: "error", code: err.code || null, message: err.message, suggestedThin: err.suggestedThin || null });
 	}
 };

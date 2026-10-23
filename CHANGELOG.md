@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **`buildMesh` option `maxPoints`.** If more points than this remain after thinning, the build throws `TOO_MANY_POINTS` before the memory-heavy steps. The message suggests a thin value (`err.suggestedThin`). Memory is about 4 GB per 1M points after thinning in this version. The demo sets 600,000 and fills in the suggested thin for you.
+
 - **`buildMesh` option `onProgress(stage, fraction)`.** The stages are thin, denoise, prepare, reconstruct (about every 1% of points), weld, orient and done.
 - **The demo builds and patches in a Web Worker,** with progress and a Cancel button, so a large cloud no longer freezes the page. Above 1M points it asks for a thin value before building.
 

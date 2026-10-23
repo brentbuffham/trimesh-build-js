@@ -41,6 +41,18 @@ describe("buildMesh", function () {
 		expect(calls[calls.length - 1]).toEqual(["done", 1]);
 	});
 
+	it("maxPoints stops the build after thinning and suggests a thin value", function () {
+		var err = null;
+		try { buildMesh(fibonacciSphere(20000, 5), { thin: 0.05, maxPoints: 5000 }); } catch (e) { err = e; }
+		expect(err && err.code).toBe("TOO_MANY_POINTS");
+		expect(err.message).toMatch(/20,000 points/);
+		expect(err.message).toMatch(/thin 0\.\d+/);
+		expect(err.suggestedThin).toBeGreaterThan(0.05);
+		// the suggestion is enough
+		var r = buildMesh(fibonacciSphere(20000, 5), { thin: err.suggestedThin, maxPoints: 5000 });
+		expect(r.report.pointsAfterThin).toBeLessThanOrEqual(5000);
+	});
+
 	it("tunnel open with 2 loops", function () {
 		var r = buildMesh(cylinderTunnel(2.5, 20, 0.25, 1), {});
 		expect(r.mesh.closed).toBe(false);

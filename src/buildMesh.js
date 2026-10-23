@@ -9,8 +9,8 @@
 // Only bad input throws. Everything about the result is reported.
 //=============================================================
 
-import { dedupe, denoisePoints } from "las-laz-js";
-import { prepareCloud } from "./input/prepareCloud.js";
+import { dedupe, denoisePoints, buildIndex } from "las-laz-js";
+import { prepareCloud, estimateMedianSpacing } from "./input/prepareCloud.js";
 import { insertConstraints, EMPTY_CONSTRAINTS } from "./constraints/insertConstraints.js";
 import { RECONSTRUCTORS } from "./reconstruct/index.js";
 import { vertexCoordsOf } from "./reconstruct/vertexCoords.js";
@@ -46,6 +46,25 @@ function xyzColumns(cols) {
 	return { count: n, x: x, y: y, z: z };
 }
 
+// Memory grows with the points left after thinning (about 4 GB at 1M in
+// v0.2), so a caller with a limit (a browser tab) sets maxPoints. The error
+// suggests a thin value: spacing grows with sqrt(points / target).
+function tooManyPoints(input, opts) {
+	var xyz = xyzColumns(input), n = input.count;
+	var coords = new Float64Array(3 * n);
+	for (var i = 0; i < n; i++) { coords[3 * i] = xyz.x[i]; coords[3 * i + 1] = xyz.y[i]; coords[3 * i + 2] = xyz.z[i]; }
+	var spacing = Math.max(opts.thin || 0, estimateMedianSpacing(buildIndex({ count: n, positions: coords }), coords, n) || 0);
+	var raw = spacing * Math.sqrt(n / opts.maxPoints) * 1.2;
+	var mag = Math.pow(10, Math.floor(Math.log10(raw)) - 1);
+	var suggested = Math.ceil(raw / mag) * mag;
+	var e = new TrimeshBuildError(ERROR_CODES.TOO_MANY_POINTS,
+		n.toLocaleString("en-US") + " points" + (opts.thin ? " after thinning to " + opts.thin : "") +
+		", more than maxPoints " + opts.maxPoints.toLocaleString("en-US") + ". Try thin " + suggested.toPrecision(2) + ".");
+	e.count = n;
+	e.suggestedThin = Number(suggested.toPrecision(2));
+	return e;
+}
+
 function shiftPoint(p, o) {
 	if (!p || !isFinite(p[0]) || !isFinite(p[1]) || !isFinite(p[2])) {
 		throw new TrimeshBuildError(ERROR_CODES.INVALID_INPUT, "each viewpoint must be a finite [x, y, z]");
@@ -75,6 +94,7 @@ export function buildMesh(cols, options) {
 		report("thin", 0);
 		input = dedupe(xyzColumns(cols), opts.thin, { z: true });
 	}
+	if (opts.maxPoints && input.count > opts.maxPoints) throw tooManyPoints(input, opts);
 
 	var cloud;
 	if (opts.denoise) {

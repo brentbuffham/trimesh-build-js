@@ -7,11 +7,12 @@
 // the pipeline cannot start from.
 //=============================================================
 
-/** @type {Readonly<{INVALID_INPUT: string, NEEDS_ORIGIN: string, TOO_FEW_POINTS: string, CROSSING_BREAKLINES: string}>} */
+/** @type {Readonly<{INVALID_INPUT: string, NEEDS_ORIGIN: string, TOO_FEW_POINTS: string, TOO_MANY_POINTS: string, CROSSING_BREAKLINES: string}>} */
 export var ERROR_CODES = Object.freeze({
 	INVALID_INPUT: "INVALID_INPUT",
 	NEEDS_ORIGIN: "NEEDS_ORIGIN",
 	TOO_FEW_POINTS: "TOO_FEW_POINTS",
+	TOO_MANY_POINTS: "TOO_MANY_POINTS",
 	CROSSING_BREAKLINES: "CROSSING_BREAKLINES"
 });
 
