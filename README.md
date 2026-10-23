@@ -80,7 +80,7 @@ var workerUrl = new URL(import.meta.resolve("trimesh-build-js/worker/node"));
 var result = await buildMeshAsync(cols, { workers: 8, createWorker: function () { return new Worker(workerUrl); } });
 ```
 
-At 1M points on a 24-core machine, triangulation drops from 17 s to 3.6 s, and the whole build from 39 s to 25 s. Memory is about 1.5 GB at 1M points. For a browser tab, set `maxPoints`: the build then stops with `TOO_MANY_POINTS` and a suggested thin value instead of running out of memory.
+At 1M points on a 24-core machine the whole build takes about 14.5 s (triangulation 3.4 s), down from 55 s in 0.2.0, and peaks at about 1.1 GB. For a browser tab, set `maxPoints`: the build then stops with `TOO_MANY_POINTS` and a suggested thin value instead of running out of memory.
 
 ### Patching loops
 

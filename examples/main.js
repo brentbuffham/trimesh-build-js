@@ -195,7 +195,7 @@ function readOptions(src) {
 		k: num("k"), minVotes: num("minVotes"), normalAgreement: num("normalAgreement"),
 		maxPlaneOffset: num("maxPlaneOffset"), maxGapEdges: num("maxGapEdges"),
 		breaklines: src.breaklines,
-		// a tab has about 4 GB; v0.2 needs about 4 GB per 1M points after thinning
+		// a tab has about 4 GB; v0.3 needs about 1.2 GB per 1.4M points after thinning
 		maxPoints: MAX_BUILD_POINTS
 	};
 	if (num("thin") > 0) o.thin = num("thin");
@@ -207,7 +207,7 @@ function readOptions(src) {
 
 // ── Worker ──
 var LARGE = 1000000;            // above this, a build without thinning is refused
-var MAX_BUILD_POINTS = 600000;  // points left after thinning that a tab can mesh
+var MAX_BUILD_POINTS = 1500000; // points left after thinning that a tab can mesh
 var worker = null;
 var busy = false;
 var buildStart = 0;

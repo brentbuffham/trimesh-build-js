@@ -1,6 +1,6 @@
 {
 	"name": "trimesh-build-js",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"description": "Reconstruct open or closed triangle meshes from point clouds (caves, drives, voids) with optional break lines, as a trimesh-boolean BMS soup.",
 	"type": "module",
 	"main": "./src/index.js",
@@ -44,7 +44,7 @@
 		"@kninnug/constrainautor": "^4.1.0",
 		"delaunator": "^5.1.0",
 		"las-laz-js": "^0.7.1",
-		"trimesh-boolean": "^0.7.6"
+		"trimesh-boolean": "^0.7.7"
 	},
 	"devDependencies": {
 		"three": "^0.183.2",
