@@ -28,45 +28,76 @@ import { buildEdgeMap, poolEdgeKey } from "../bms/edges.js";
  * @property {number|null} enclosedVolume - null unless closed
  * @property {Array<{a: number, b: number}>} constrainedEdges - break line edges present in the mesh
  * @property {string} orientation
+ * @property {number} orientationConflicts - interior edges whose two triangles run them the same way (folds)
  */
 
-// Trace loops from directed boundary edges (each in its triangle's direction).
+// Trace loops over the boundary edges (1 face). The walk is undirected, so a
+// winding conflict cannot break a loop into fragments, but at each vertex it
+// prefers the edge that runs in its triangle's direction, so a bow-tie
+// vertex still splits into its two loops. Each loop is returned running its
+// first edge in that edge's triangle direction.
 function traceLoops(soup, edges) {
-	var next = new Map();
-	var count = 0;
-	edges.forEach(function (list) {
+	var adj = new Map(); // vertex -> [{to, key, forward}]
+	function link(a, b, key, forward) {
+		if (!adj.has(a)) adj.set(a, []);
+		adj.get(a).push({ to: b, key: key, forward: forward });
+	}
+	edges.forEach(function (list, key) {
 		if (list.length !== 1) return;
 		var t = soup[list[0]];
 		var vs = [t.v0.id, t.v1.id, t.v2.id];
 		for (var e = 0; e < 3; e++) {
 			var a = vs[e], b = vs[(e + 1) % 3];
-			var l2 = edges.get(poolEdgeKey(a, b));
-			if (l2 === list) {
-				if (!next.has(a)) next.set(a, []);
-				next.get(a).push(b);
-				count++;
-				break;
-			}
+			if (poolEdgeKey(a, b) === key) { link(a, b, key, true); link(b, a, key, false); break; }
 		}
 	});
+	var used = new Set();
+	function pick(v) {
+		var outs = adj.get(v), any = null;
+		for (var i = 0; i < outs.length; i++) {
+			if (used.has(outs[i].key)) continue;
+			if (outs[i].forward) return outs[i];
+			if (!any) any = outs[i];
+		}
+		return any;
+	}
 	var loops = [];
-	var starts = Array.from(next.keys()).sort(function (x, y) { return x - y; });
+	var starts = Array.from(adj.keys()).sort(function (x, y) { return x - y; });
 	for (var s = 0; s < starts.length; s++) {
 		var start = starts[s];
-		while (next.get(start) && next.get(start).length) {
+		var step;
+		while ((step = pick(start))) {
 			var loop = [start];
-			var cur = next.get(start).shift();
-			var guard = count + 1;
-			while (cur !== start && guard-- > 0) {
+			var firstForward = step.forward;
+			used.add(step.key);
+			var cur = step.to;
+			while (cur !== start) {
 				loop.push(cur);
-				var outs = next.get(cur);
-				if (!outs || outs.length === 0) break; // open chain (inconsistent winding)
-				cur = outs.shift();
+				step = pick(cur);
+				if (!step) break; // open chain: a non-manifold vertex
+				used.add(step.key);
+				cur = step.to;
 			}
+			if (!firstForward) loop = [loop[0]].concat(loop.slice(1).reverse());
 			loops.push(loop);
 		}
 	}
 	return loops;
+}
+
+// Interior edges whose two triangles run them the same way
+function countConflicts(soup, edges) {
+	var n = 0;
+	edges.forEach(function (list, key) {
+		if (list.length !== 2) return;
+		var dirs = list.map(function (ti) {
+			var t = soup[ti], vs = [t.v0.id, t.v1.id, t.v2.id];
+			for (var e = 0; e < 3; e++) if (poolEdgeKey(vs[e], vs[(e + 1) % 3]) === key) return vs[e];
+			return -1;
+		});
+		if (dirs[0] === dirs[1]) n++;
+	});
+	return n;
 }
 
 /**
@@ -96,7 +127,8 @@ export function validateMesh(bms, orientation) {
 		nonManifoldEdgeCount: nonManifold,
 		enclosedVolume: closed ? Math.abs(computeSignedVolume(soup)) : null,
 		constrainedEdges: constrainedEdges,
-		orientation: orientation
+		orientation: orientation,
+		orientationConflicts: countConflicts(soup, edges)
 	};
 }
 

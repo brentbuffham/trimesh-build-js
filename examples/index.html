@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>trimesh-build — Three.js Demo</title>
+<style>
+	* { margin: 0; padding: 0; box-sizing: border-box; }
+	body { font-family: system-ui, sans-serif; background: #1a1a1a; color: #d0d0d0; overflow: hidden; }
+
+	/* ── Layout ── */
+	#app { display: flex; flex-direction: column; height: 100vh; }
+	#main-row { display: flex; flex: 1; overflow: hidden; }
+	#viewport { flex: 1; position: relative; }
+
+	/* ── Top toolbar ── */
+	#toolbar { padding: 4px 16px; background: #111; border-bottom: 1px solid #333; }
+	.toolbar-row { display: flex; align-items: center; gap: 10px; padding: 3px 0; flex-wrap: wrap; }
+	.toolbar-row .sep { width: 1px; height: 16px; background: #444; flex-shrink: 0; }
+	#toolbar h1 { font-size: 1rem; color: #cc2222; white-space: nowrap; }
+	#toolbar label { font-size: 0.8rem; color: #ddd; white-space: nowrap; }
+	#toolbar select, #toolbar button, #toolbar input[type=number] {
+		padding: 4px 8px; border: 1px solid #555; background: #333; color: #ddd;
+		border-radius: 3px; font-size: 0.8rem;
+	}
+	#toolbar input[type=number] { width: 64px; }
+	#toolbar button { cursor: pointer; }
+	#toolbar button:hover { background: #444; }
+	#toolbar button.primary { background: #cc2222; color: #fff; border-color: #cc2222; font-weight: 600; }
+	#toolbar button.primary:hover { background: #ee3333; }
+	#toolbar select:focus, #toolbar button:focus, #toolbar input:focus { outline: 1px solid #cc2222; }
+
+	/* ── Right info panel ── */
+	#info-panel {
+		width: 300px; min-width: 240px; background: #111; border-left: 1px solid #333;
+		padding: 10px 12px; font-size: 0.75rem; font-family: 'Courier New', monospace;
+		overflow-y: auto; display: flex; flex-direction: column; gap: 12px;
+	}
+	#info-panel h3 { color: #cc2222; font-size: 0.8rem; margin-bottom: 4px; }
+	#info-panel .stat { color: #999; line-height: 1.6; }
+	#info-panel .stat b { color: #d0d0d0; }
+	.legend { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+	.swatch { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+	.good { color: #44cc66; font-weight: bold; }
+	.bad { color: #cc2222; font-weight: bold; }
+
+	#processing-overlay {
+		display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999;
+		justify-content: center; align-items: center; font: bold 18px monospace; color: #fff;
+	}
+	#processing-overlay.active { display: flex; }
+	#error { color: #ff6666; white-space: pre-wrap; }
+	@media (max-width: 720px) {
+		#main-row { flex-direction: column; }
+		#info-panel { width: auto; max-height: 40vh; border-left: none; border-top: 1px solid #333; }
+	}
+</style>
+</head>
+<body>
+<div id="app">
+	<div id="toolbar">
+		<div class="toolbar-row">
+			<h1>trimesh-build</h1>
+			<span class="sep"></span>
+			<label>Source
+				<select id="source">
+					<option value="sphere">Closed void (sphere)</option>
+					<option value="noisySphere">Noisy void (sphere, ±15 cm)</option>
+					<option value="capped">Void with open cap</option>
+					<option value="tunnel">Drive (open tunnel)</option>
+					<option value="halfpipe">Arched drive + crown break line</option>
+					<option value="walls">Parallel walls 2 × spacing apart</option>
+					<option value="file">LAS / LAZ file…</option>
+				</select>
+			</label>
+			<input type="file" id="file" accept=".las,.laz" style="display:none">
+			<span class="sep"></span>
+			<label>thin <input type="number" id="thin" step="0.01" min="0" value="0"></label>
+			<label>denoise <input type="number" id="denoise" step="1" min="0" max="6" value="0"></label>
+			<label>k <input type="number" id="k" step="1" min="8" max="60" value="20"></label>
+			<label>votes <input type="number" id="minVotes" step="1" min="1" max="3" value="2"></label>
+			<label>|n·n| <input type="number" id="normalAgreement" step="0.05" min="0" max="1" value="0.5"></label>
+			<label>offset <input type="number" id="maxPlaneOffset" step="0.1" min="0" value="0.5"></label>
+			<label>gaps <input type="number" id="maxGapEdges" step="1" min="0" value="6"></label>
+		</div>
+		<div class="toolbar-row">
+			<label><input type="checkbox" id="viewpoint"> viewpoint</label>
+			<label><input type="checkbox" id="closeHoles"> close holes</label>
+			<button id="build" class="primary">Build</button>
+			<span class="sep"></span>
+			<label><input type="checkbox" id="showMesh" checked> mesh</label>
+			<label><input type="checkbox" id="showWire"> wireframe</label>
+			<label><input type="checkbox" id="showPoints"> points</label>
+			<label><input type="checkbox" id="showLoops" checked> loops</label>
+			<label><input type="checkbox" id="showNormals"> normals</label>
+			<button id="exportObj">Export OBJ</button>
+		</div>
+	</div>
+	<div id="main-row">
+		<div id="viewport"></div>
+		<div id="info-panel">
+			<div>
+				<h3>Result</h3>
+				<div class="stat" id="result">Pick a source and press Build.</div>
+				<div id="error"></div>
+			</div>
+			<div>
+				<h3>Legend</h3>
+				<div class="legend"><span class="swatch" style="background:#8fa8c8"></span>front face (into the void)</div>
+				<div class="legend"><span class="swatch" style="background:#d08030"></span>back face (rock side)</div>
+				<div class="legend"><span class="swatch" style="background:#ff3333"></span>boundary loop (open edge)</div>
+				<div class="legend"><span class="swatch" style="background:#ffdd00"></span>break line edge</div>
+				<div class="legend"><span class="swatch" style="background:#ff33ff"></span>non-manifold edge</div>
+			</div>
+			<div>
+				<h3>Report</h3>
+				<div class="stat" id="report"></div>
+			</div>
+		</div>
+	</div>
+</div>
+<div id="processing-overlay">Building mesh…</div>
+<script type="module" src="./main.js"></script>
+</body>
+</html>

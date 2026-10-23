@@ -70,6 +70,23 @@ describe("validateMesh", function () {
 	});
 });
 
+describe("validateMesh with bad winding", function () {
+	it("inconsistent winding still traces one loop and counts the conflict", function () {
+		// open square, second triangle wound the wrong way
+		var m = validateMesh(bmsOf([0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0], [0, 1, 2, 0, 3, 2]), "unresolved");
+		expect(m.boundaryLoops.length).toBe(1);
+		expect(m.boundaryLoops[0].length).toBe(4);
+		expect(m.orientationConflicts).toBe(1);
+	});
+
+	it("bow-tie vertex gives two loops of 3", function () {
+		var m = validateMesh(bmsOf([0, 0, 0, 1, 0, 0, 0, 1, 0, -1, 0, 0, 0, -1, 0], [0, 1, 2, 0, 3, 4]), "unresolved");
+		var sizes = m.boundaryLoops.map(function (l) { return l.length; }).sort();
+		expect(sizes).toEqual([3, 3]);
+		expect(m.orientationConflicts).toBe(0);
+	});
+});
+
 describe("pointInside", function () {
 	it("centroid inside, far point outside", function () {
 		var b = bmsOf(TET, TET_T);

@@ -20,6 +20,7 @@ import { orientMesh } from "./bms/orientMesh.js";
 import { validateMesh } from "./validate/validateMesh.js";
 import { closeHoles } from "./post/closeHoles.js";
 import { fillGaps } from "./post/fillGaps.js";
+import { markWeldDuplicates } from "./input/markWeldDuplicates.js";
 import { TrimeshBuildError, ERROR_CODES } from "./errors.js";
 
 export var DEFAULT_OPTIONS = Object.freeze({
@@ -90,6 +91,8 @@ export function buildMesh(cols, options) {
 	var constraints = opts.breaklines && opts.breaklines.length
 		? insertConstraints(cloud, opts.breaklines, { tolerance: tolerance, breaklineSnap: opts.breaklineSnap })
 		: EMPTY_CONSTRAINTS(cloud);
+	// ids the pool would weld together must not both vote
+	var weldDuplicates = markWeldDuplicates(cloud, constraints, tolerance);
 
 	var rec = reconstruct(cloud, constraints, opts);
 
@@ -114,6 +117,7 @@ export function buildMesh(cols, options) {
 		var ch = closeHoles(bms, mesh, opts.closeHoles === true ? {} : opts.closeHoles);
 		unfilled = ch.unfilledLoops;
 		filled = ch.added;
+		orient = orientMesh(bms, viewpoints);
 		mesh = validateMesh(bms, orient.orientation);
 	}
 
@@ -138,6 +142,7 @@ export function buildMesh(cols, options) {
 			pointsUsed: rec.report.pointsUsed,
 			pointsSkipped: rec.report.pointsSkipped,
 			pointsDropped: constraints.snapReport.dropped,
+			weldDuplicatesDropped: weldDuplicates,
 			snappedBreaklinePoints: constraints.snapReport.nearTolerance,
 			breaklineSegments: constraints.segments.length / 2,
 			trianglesProposed: rec.report.trianglesProposed,

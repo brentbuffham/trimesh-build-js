@@ -41,6 +41,7 @@ describe("buildMesh", function () {
 		expect(r.report.weld.collapsedConstraints).toBe(0);
 		expect(r.report.breaklineSegments).toBeGreaterThanOrEqual(40);
 		expect(r.mesh.constrainedEdges.length).toBe(r.report.breaklineSegments);
+		expect(r.mesh.nonManifoldEdgeCount).toBe(0);
 	});
 
 	it("breakline vertices keep their exact coordinates", function () {
