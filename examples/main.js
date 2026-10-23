@@ -1,6 +1,6 @@
 // examples/main.js
 //=============================================================
-// trimesh-build demo: build a mesh from a cloud and show what the
+// trimesh-build-js demo: build a mesh from a cloud and show what the
 // pipeline reports — open loops, break line edges, non-manifold
 // edges, and which way the normals face.
 // Rendering is origin-shifted (the BMS soup already is).
@@ -278,13 +278,13 @@ $("file").addEventListener("change", function () {
 $("exportObj").addEventListener("click", function () {
 	if (!lastResult) return;
 	var ix = toIndexed(lastResult);
-	var lines = ["# trimesh-build export"];
+	var lines = ["# trimesh-build-js export"];
 	for (var i = 0; i < ix.positions.length; i += 3) lines.push("v " + ix.positions[i].toFixed(4) + " " + ix.positions[i + 1].toFixed(4) + " " + ix.positions[i + 2].toFixed(4));
 	for (var f = 0; f < ix.index.length; f += 3) lines.push("f " + (ix.index[f] + 1) + " " + (ix.index[f + 1] + 1) + " " + (ix.index[f + 2] + 1));
 	var blob = new Blob([lines.join("\n")], { type: "text/plain" });
 	var a = document.createElement("a");
 	a.href = URL.createObjectURL(blob);
-	a.download = "trimesh-build.obj";
+	a.download = "trimesh-build-js.obj";
 	a.click();
 	URL.revokeObjectURL(a.href);
 });

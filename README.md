@@ -1,4 +1,4 @@
-# trimesh-build
+# trimesh-build-js
 
 Build triangle meshes, open or closed, from point clouds of underground voids: caves, drives, tunnels, stopes, CMS cavity scans and blast-hole voids. Break lines you digitise become hard edges. A closed mesh reports its enclosed volume.
 
@@ -20,14 +20,14 @@ A triangle is accepted when the patches of 2 of its 3 vertices agree on it. Acce
 ## Install
 
 ```sh
-npm install trimesh-build
+npm install trimesh-build-js
 ```
 
 ## Use
 
 ```js
 import { openLas } from "las-laz-js";
-import { buildMesh, toIndexed } from "trimesh-build";
+import { buildMesh, toIndexed } from "trimesh-build-js";
 
 var las = await openLas(file);
 var pts = await las.readPoints({ fields: ["x", "y", "z"] });

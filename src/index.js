@@ -1,5 +1,5 @@
 /**
- * trimesh-build
+ * trimesh-build-js
  *
  * Reconstruct open or closed triangle meshes from point clouds of
  * underground voids (caves, drives, stopes, blast-hole voids), with
@@ -7,7 +7,7 @@
  *
  * Author: Brent Buffham (kirra-design.com)
  *
- * @module trimesh-build
+ * @module trimesh-build-js
  */
 
 // ── Pipeline ──
