@@ -7,12 +7,16 @@
 //   -> ingestToBMS (the weld) -> cleanSoup -> orientMesh
 //   -> validateMesh -> [closeHoles -> validateMesh]
 // Only bad input throws. Everything about the result is reported.
+// buildMeshAsync runs the reconstructor on worker threads; the stages
+// before and after are the same code (prepareStages, finishStages).
 //=============================================================
 
 import { dedupe, denoisePoints, buildIndex } from "las-laz-js";
 import { prepareCloud, estimateMedianSpacing } from "./input/prepareCloud.js";
 import { insertConstraints, EMPTY_CONSTRAINTS } from "./constraints/insertConstraints.js";
 import { RECONSTRUCTORS } from "./reconstruct/index.js";
+import { acceptProposals } from "./reconstruct/localDelaunay/run.js";
+import { proposeInitMessage } from "./workers/proposeHandler.js";
 import { vertexCoordsOf } from "./reconstruct/vertexCoords.js";
 import { ingestToBMS } from "./bms/ingestToBMS.js";
 import { cleanSoup } from "./bms/cleanSoup.js";
@@ -72,13 +76,9 @@ function shiftPoint(p, o) {
 	return [p[0] - o.x, p[1] - o.y, p[2] - o.z];
 }
 
-/**
- * @param {Object} cols - las-laz-js columns: { count, positions } or { count, x, y, z }
- * @param {Object} [options] - see spec section 4; also `thin` (min spacing, world units), `denoise` (true or las-laz-js denoisePoints options) and `algorithm`
- * @returns {{pool: Object, soup: Array<Object>, origin: {x: number, y: number, z: number},
- *   mesh: import("./validate/validateMesh.js").MeshResult, unfilledLoops: number[][], report: Object}}
- */
-export function buildMesh(cols, options) {
+// Everything before the reconstructor: options, thin, denoise, prepare,
+// break lines. Shared by buildMesh and buildMeshAsync.
+function prepareStages(cols, options) {
 	var opts = Object.assign({}, DEFAULT_OPTIONS, options || {});
 	var reconstruct = RECONSTRUCTORS[opts.algorithm];
 	if (!reconstruct) throw new TrimeshBuildError(ERROR_CODES.INVALID_INPUT, "unknown algorithm " + String(opts.algorithm));
@@ -125,9 +125,12 @@ export function buildMesh(cols, options) {
 	// ids the pool would weld together must not both vote
 	var weldDuplicates = markWeldDuplicates(cloud, constraints, tolerance);
 
-	report("reconstruct", 0);
-	var rec = reconstruct(cloud, constraints, opts);
+	return { opts: opts, report: report, reconstruct: reconstruct, pointsInput: pointsInput, input: input, cloud: cloud, tolerance: tolerance, constraints: constraints, weldDuplicates: weldDuplicates };
+}
 
+// Everything after the reconstructor: weld, clean, orient, validate, repair.
+function finishStages(s, rec) {
+	var opts = s.opts, report = s.report, pointsInput = s.pointsInput, input = s.input, cloud = s.cloud, tolerance = s.tolerance, constraints = s.constraints, weldDuplicates = s.weldDuplicates;
 	report("weld", 0);
 	var bms = ingestToBMS(vertexCoordsOf(cloud, constraints), rec.triangles, tolerance, constraints.firstId);
 	bms.origin = cloud.origin;
@@ -197,4 +200,97 @@ export function buildMesh(cols, options) {
 	// the shared edge map travels with the result, for patchLoop (not enumerable)
 	if (bms._edges) Object.defineProperty(result, "_edges", { value: bms._edges, writable: true, configurable: true, enumerable: false });
 	return result;
+}
+
+/**
+ * @param {Object} cols - las-laz-js columns: { count, positions } or { count, x, y, z }
+ * @param {Object} [options] - see spec section 4; also `thin` (min spacing, world units), `denoise` (true or las-laz-js denoisePoints options), `maxPoints`, `onProgress(stage, fraction)` and `algorithm`
+ * @returns {{pool: Object, soup: Array<Object>, origin: {x: number, y: number, z: number},
+ *   mesh: import("./validate/validateMesh.js").MeshResult, unfilledLoops: number[][], report: Object}}
+ */
+export function buildMesh(cols, options) {
+	var s = prepareStages(cols, options);
+	s.report("reconstruct", 0);
+	return finishStages(s, s.reconstruct(s.cloud, s.constraints, s.opts));
+}
+
+/**
+ * buildMesh with the per-point triangulation spread over worker threads.
+ * Same mesh as buildMesh: each patch depends only on its own point's
+ * neighbours, and the votes are counted in one place.
+ *
+ * The host says how to start a worker running the library's worker script:
+ *   browser: function () { return new Worker(new URL("trimesh-build-js/worker/browser", import.meta.url), { type: "module" }); }
+ *   Node:    function () { return new Worker(new URL("trimesh-build-js/worker/node", import.meta.url)); }  // node:worker_threads
+ *
+ * @param {Object} cols - as buildMesh
+ * @param {Object} [options] - as buildMesh, plus:
+ *   workers (number of workers; 0 or 1 runs buildMesh on this thread) and
+ *   createWorker (function returning a Worker that runs proposeWorker.browser.js or proposeWorker.node.js)
+ * @returns {Promise<Object>} the buildMesh result
+ */
+export async function buildMeshAsync(cols, options) {
+	var opts = options || {};
+	var workers = opts.workers | 0;
+	if (workers < 2 || typeof opts.createWorker !== "function") return buildMesh(cols, opts);
+	var s = prepareStages(cols, opts);
+	s.report("reconstruct", 0);
+	var rec = s.opts.algorithm === "localDelaunay"
+		? await reconstructInWorkers(s, workers, opts.createWorker)
+		: s.reconstruct(s.cloud, s.constraints, s.opts);
+	return finishStages(s, rec);
+}
+
+// Worker messages arrive as { data } (browser) or bare (Node)
+function listen(w, onMessage, onError) {
+	if (typeof w.on === "function") {
+		w.on("message", onMessage);
+		w.on("error", onError);
+	} else {
+		w.onmessage = function (e) { onMessage(e.data); };
+		w.onerror = function (e) { onError(e.error || new Error(e.message || "worker error")); };
+	}
+}
+
+// Hand out ranges of about 1/(8 x workers) of the points, so faster workers
+// take more and progress moves smoothly; vote when every range is back.
+function reconstructInWorkers(s, workers, createWorker) {
+	var cloud = s.cloud, constraints = s.constraints;
+	var n = cloud.count;
+	var size = Math.max(256, Math.ceil(n / (8 * workers)));
+	var ranges = [];
+	for (var from = 0; from < n; from += size) ranges.push([from, Math.min(n, from + size)]);
+	var init = proposeInitMessage(cloud, constraints, s.opts);
+	var pool = [], parts = [], next = 0, done = 0, failed = false;
+
+	return new Promise(function (resolve, reject) {
+		function finish(err) {
+			pool.forEach(function (w) { w.terminate(); });
+			if (err) { failed = true; reject(err); return; }
+			parts.sort(function (a, b) { return a.from - b.from; });
+			var vc = vertexCoordsOf(cloud, constraints);
+			resolve(acceptProposals(parts, cloud, s.opts, vc));
+		}
+		function feed(w) {
+			if (next >= ranges.length) return;
+			var r = ranges[next++];
+			w.postMessage({ type: "range", from: r[0], to: r[1] });
+		}
+		var count = Math.min(workers, ranges.length);
+		for (var i = 0; i < count; i++) {
+			(function (w) {
+				pool.push(w);
+				listen(w, function (m) {
+					if (failed || m.type !== "proposals") return;
+					parts.push(m);
+					done++;
+					s.report("reconstruct", done / ranges.length);
+					if (done === ranges.length) finish(null);
+					else feed(w);
+				}, function (err) { if (!failed) finish(err); });
+				w.postMessage(init);
+				feed(w);
+			})(createWorker());
+		}
+	});
 }

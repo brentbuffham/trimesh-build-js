@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **`buildMeshAsync(cols, { workers, createWorker })`** spreads triangulation over worker threads and gives the same mesh as `buildMesh`. Worker scripts: `trimesh-build-js/worker/browser` and `trimesh-build-js/worker/node`. New exports `proposeTriangles` and `acceptProposals`.
+- **Faster vote counting:** typed-array hash tables, no string keys. At 1M points, 9.6 s → 1.1 s.
+- **Result at 1M points:** 55 s → 39 s on one thread, 25 s with workers.
+- **Demo:** triangulates on child workers. Thin and denoise keep the values you type when the source changes. New **Open file…** button.
+
 - **Less memory, faster.**
   - Edges use numeric keys in a typed-array `EdgeTable` (no JavaScript array per edge).
   - One cached edge table is shared by every stage instead of being rebuilt in each.

@@ -409,6 +409,10 @@ $("undoPatch").addEventListener("click", function () {
 	worker.postMessage({ type: "undo" });
 });
 
+// Values the user typed are kept when the source changes
+var userSet = { thin: false, denoise: false };
+["thin", "denoise"].forEach(function (id) { $(id).addEventListener("input", function () { userSet[id] = true; }); });
+
 $("source").addEventListener("change", function () {
 	currentSource = null;
 	var isFile = $("source").value === "file";
@@ -416,8 +420,8 @@ $("source").addEventListener("change", function () {
 	// Raw scans need thinning and denoising; synthetic clouds do not. The
 	// cave is low-noise photogrammetry: thin only, and no single viewpoint
 	// sees a whole cave.
-	$("thin").value = isFile || isCave ? "0.05" : "0";
-	$("denoise").value = isFile ? "3" : "0";
+	if (!userSet.thin) $("thin").value = isFile || isCave ? "0.05" : "0";
+	if (!userSet.denoise) $("denoise").value = isFile ? "3" : "0";
 	$("viewpoint").checked = !isFile && !isCave && $("source").value !== "walls";
 	if (isFile) $("file").click();
 	else build();
@@ -425,7 +429,17 @@ $("source").addEventListener("change", function () {
 $("file").addEventListener("change", function () {
 	currentFile = $("file").files[0] || null;
 	currentSource = null;
+	$("file").value = ""; // the same file can be opened again
 	if (currentFile) build();
+});
+$("openFile").addEventListener("click", function () {
+	if ($("source").value !== "file") {
+		$("source").value = "file";
+		if (!userSet.thin) $("thin").value = "0.05";
+		if (!userSet.denoise) $("denoise").value = "3";
+		$("viewpoint").checked = false;
+	}
+	$("file").click();
 });
 
 // ── Export OBJ (world coordinates, via toIndexed in the worker) ──

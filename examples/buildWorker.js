@@ -2,7 +2,8 @@
 //=============================================================
 // Demo worker: owns the cloud and the buildMesh result, so a big
 // build never freezes the page and Cancel can stop it outright.
-// Sends back only what the page draws, as typed arrays.
+// Sends back only what the page draws, as typed arrays. The per-point
+// triangulation runs on child workers (buildMeshAsync).
 //
 // Page -> worker:
 //   { type: "setCloud", cols }             (cols buffers transferred)
@@ -18,7 +19,13 @@
 //   { type: "error", code, message }
 //=============================================================
 
-import { buildMesh, toIndexed, patchLoop, patchLoops } from "../src/index.js";
+import { buildMeshAsync, toIndexed, patchLoop, patchLoops } from "../src/index.js";
+
+// Triangulation fans out to child workers, one per spare core (up to 8)
+var CHILD_WORKERS = Math.max(1, Math.min(8, ((self.navigator && navigator.hardwareConcurrency) || 4) - 1));
+function createChildWorker() {
+	return new Worker(new URL("../src/workers/proposeWorker.browser.js", import.meta.url), { type: "module" });
+}
 
 var cols = null;
 var result = null;
@@ -101,7 +108,7 @@ function snapshot() {
 	};
 }
 
-self.onmessage = function (e) {
+self.onmessage = async function (e) {
 	var m = e.data;
 	try {
 		if (m.type === "setCloud") {
@@ -113,7 +120,9 @@ self.onmessage = function (e) {
 				onProgress: function (stage, fraction) { self.postMessage({ type: "progress", stage: stage, fraction: fraction }); }
 			});
 			var t0 = performance.now();
-			result = buildMesh(cols, opts);
+			opts.workers = CHILD_WORKERS;
+			opts.createWorker = createChildWorker;
+			result = await buildMeshAsync(cols, opts);
 			undoStack = [];
 			send("built", { ms: Math.round(performance.now() - t0) });
 		} else if (m.type === "patch" || m.type === "patchAll") {

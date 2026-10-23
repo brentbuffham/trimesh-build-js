@@ -57,6 +57,31 @@ var indexed = toIndexed(result);   // { positions: Float64Array (world), index: 
 // addGeneratedSurface({ id, name, positions: indexed.positions, index: indexed.index, layerName })
 ```
 
+### Using every core
+
+`buildMeshAsync` gives the same mesh as `buildMesh`, with the per-point triangulation spread over worker threads. You tell it how to start a worker, and the library supplies the worker script:
+
+```js
+import { buildMeshAsync } from "trimesh-build-js";
+
+// browser
+var result = await buildMeshAsync(cols, {
+	thin: 0.05,
+	workers: navigator.hardwareConcurrency - 1,
+	createWorker: function () {
+		return new Worker(new URL("trimesh-build-js/worker/browser", import.meta.url), { type: "module" });
+	},
+	onProgress: function (stage, fraction) { /* thin, denoise, prepare, reconstruct, weld, orient, done */ }
+});
+
+// Node
+import { Worker } from "node:worker_threads";
+var workerUrl = new URL(import.meta.resolve("trimesh-build-js/worker/node"));
+var result = await buildMeshAsync(cols, { workers: 8, createWorker: function () { return new Worker(workerUrl); } });
+```
+
+At 1M points on a 24-core machine, triangulation drops from 17 s to 3.6 s, and the whole build from 39 s to 25 s. Memory is about 1.5 GB at 1M points. For a browser tab, set `maxPoints`: the build then stops with `TOO_MANY_POINTS` and a suggested thin value instead of running out of memory.
+
 ### Patching loops
 
 `patchLoop` fills one open loop you choose. It works like **Fill** in Kirra's Mesh Edit, and is ported from `LocalVoidFill.fillLoopWithTriangles`. It uses trimesh-boolean's `triangulateLoop` on the loop's own vertices and turns each new triangle to agree with its neighbour. The result is then re-oriented and re-validated, so `result.mesh` stays current.
