@@ -305,3 +305,28 @@
 - [ ] **Step 4: Run** `npx vitest run`. Expected: all tests PASS. Any end-to-end failure goes to superpowers:systematic-debugging. Fix the stage at fault; don't loosen the assertions.
 - [ ] **Step 5: README.** Purpose, install, a `buildMesh` example from las-laz-js columns, the Kirra hand-off (`toIndexed` → `addGeneratedSurface({ positions, index })`), the normal convention, the options table (copied from spec §4), and what's deferred.
 - [ ] **Step 6: Commit** `feat: buildMesh pipeline, Kirra adapter, end-to-end tests`.
+
+### Task 11: Three.js demo page
+
+Added at Brent's request during execution (2026-10-23). It is a demo, not library code, so it has no TDD cycle; verification is a build plus a browser run.
+
+**Files:**
+- Create: `index.html`, `demo/main.js`, `demo/clouds.js`, `vite.config.js`
+- Modify: `package.json` (devDependencies `three ^0.183.0`, `vite ^7`; scripts `dev: vite`, `build:demo: vite build`)
+
+**Interfaces:**
+- Consumes: `buildMesh`, `toIndexed` (Task 10); fixtures from `test/fixtures/synthetic.js`; las-laz-js `openLas` + `BlobSource` for a dropped or picked LAS/LAZ file.
+
+- [ ] **Step 1:** Page with a left panel and a Three.js viewport (OrbitControls). Panel:
+  - **Source:** sphere, capped sphere, tunnel, half-pipe with crown break line, parallel walls, or a LAS/LAZ file.
+  - **Options:** k, minVotes, normalAgreement, maxPlaneOffset, tolerance, viewpoint on/off, closeHoles on/off.
+  - A **Build** button.
+- [ ] **Step 2:** Render the result:
+  - the mesh (MeshStandardMaterial, double-sided, back faces tinted so wrong-facing normals show);
+  - the points (toggle);
+  - boundary loops as red lines, constrained edges as yellow lines, non-manifold edges as magenta;
+  - optional normal ticks.
+
+  Show the report, `closed`, `enclosedVolume` and the timing in the panel. Positions are origin-shifted for rendering.
+- [ ] **Step 3:** Verify: `npx vite build` succeeds; `npx vite` serves the page; every synthetic source builds and shows the expected loops (sphere 0, tunnel 2) with no console errors.
+- [ ] **Step 4:** Commit `feat: Three.js demo page`.
