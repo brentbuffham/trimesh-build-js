@@ -9,7 +9,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { buildMesh, toIndexed } from "../src/index.js";
-import { syntheticSource, fileSource } from "./clouds.js";
+import { syntheticSource, fileSource, sampleSource } from "./clouds.js";
 
 var $ = function (id) { return document.getElementById(id); };
 
@@ -232,6 +232,7 @@ async function loadSource() {
 		if (!currentFile) { $("file").click(); return null; }
 		return fileSource(currentFile);
 	}
+	if (name === "wookey") return sampleSource("wookey-hole.laz");
 	return syntheticSource(name);
 }
 
@@ -261,10 +262,13 @@ $("build").addEventListener("click", build);
 $("source").addEventListener("change", function () {
 	currentSource = null;
 	var isFile = $("source").value === "file";
-	// raw scans need thinning and denoising; synthetic clouds do not
-	$("thin").value = isFile ? "0.05" : "0";
+	var isCave = $("source").value === "wookey";
+	// Raw scans need thinning and denoising; synthetic clouds do not. The
+	// cave is low-noise photogrammetry: thin only, and no single viewpoint
+	// sees a whole cave.
+	$("thin").value = isFile || isCave ? "0.05" : "0";
 	$("denoise").value = isFile ? "3" : "0";
-	$("viewpoint").checked = !isFile && $("source").value !== "walls";
+	$("viewpoint").checked = !isFile && !isCave && $("source").value !== "walls";
 	if (isFile) $("file").click();
 	else build();
 });

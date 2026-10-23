@@ -98,6 +98,12 @@ Normals are flipped for each connected component:
 - **Break line junctions.** Break lines may meet at a shared vertex (vertices closer than the weld tolerance are merged). A break line ending on another line's interior (a T-junction) is rejected like a crossing; add a vertex to the other line at that point.
 - **Deferred:** ball pivoting and screened Poisson (as extra algorithms), decimation, smoothing, tiling of very large clouds, adaptive k.
 
+## Sample data
+
+`examples/public/samples/wookey-hole.laz` is a 381,870-point survey of Wookey Hole cave, made with an iPhone 13 Pro photogrammetry workflow. It comes from [CaveSurveys, github.com/CaveSurveys/Wookey-Hole](https://github.com/CaveSurveys/Wookey-Hole), shared with "Feel free to distribute and use!". It drives a cave test and the demo's **Wookey Hole cave** source.
+
+At `thin: 0.05` it meshes in about 9 s to about 258,000 triangles. 98% of them are in one surface, with no non-manifold edges. It has no viewpoints, so orientation is per component and can be patchy where the surface folds. The file is not part of the npm package.
+
 ## Tests
 
 ```sh

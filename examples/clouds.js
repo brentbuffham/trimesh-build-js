@@ -1,7 +1,8 @@
 // examples/clouds.js
 //=============================================================
 // Demo sources: the test fixtures, with their break lines and
-// scanner viewpoints, and LAS/LAZ files via las-laz-js.
+// scanner viewpoints, LAS/LAZ files via las-laz-js, and the bundled
+// Wookey Hole cave sample (CaveSurveys, github.com/CaveSurveys/Wookey-Hole).
 //=============================================================
 
 import { openLas } from "las-laz-js";
@@ -43,6 +44,17 @@ export function syntheticSource(name) {
 			return { cols: parallelWalls(0.5, 10, 0.25, 1), breaklines: [], viewpoints: [[5, 5, 0.25]] };
 	}
 	throw new Error("unknown source " + name);
+}
+
+/**
+ * Fetch a bundled sample from examples/public/samples.
+ * @param {string} name - file name, e.g. "wookey-hole.laz"
+ * @returns {Promise<{cols: Object, breaklines: Array, viewpoints: Array<number[]>}>}
+ */
+export async function sampleSource(name) {
+	var res = await fetch(import.meta.env.BASE_URL + "samples/" + name);
+	if (!res.ok) throw new Error("could not load sample " + name + " (" + res.status + ")");
+	return fileSource(await res.blob());
 }
 
 /**
