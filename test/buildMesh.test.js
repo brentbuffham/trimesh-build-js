@@ -29,6 +29,18 @@ describe("buildMesh", function () {
 		expect(r.soup[0].mesh).toBe("A");
 	});
 
+	it("onProgress reports every stage in order, ending at done", function () {
+		var calls = [];
+		buildMesh(fibonacciSphere(3000, 5), { onProgress: function (stage, fraction) { calls.push([stage, fraction]); } });
+		var stages = [];
+		calls.forEach(function (c) { if (stages[stages.length - 1] !== c[0]) stages.push(c[0]); });
+		expect(stages).toEqual(["prepare", "reconstruct", "weld", "orient", "done"]);
+		var rec = calls.filter(function (c) { return c[0] === "reconstruct"; }).map(function (c) { return c[1]; });
+		expect(rec.length).toBeGreaterThan(5);
+		for (var i = 1; i < rec.length; i++) expect(rec[i]).toBeGreaterThanOrEqual(rec[i - 1]);
+		expect(calls[calls.length - 1]).toEqual(["done", 1]);
+	});
+
 	it("tunnel open with 2 loops", function () {
 		var r = buildMesh(cylinderTunnel(2.5, 20, 0.25, 1), {});
 		expect(r.mesh.closed).toBe(false);

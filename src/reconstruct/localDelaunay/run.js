@@ -36,8 +36,12 @@ export function runLocalDelaunay(cloud, constraints, options) {
 	};
 	var N = cloud.normals;
 	var used = 0, skipped = 0, failures = 0;
+	// progress about every 1% of points
+	var onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
+	var tick = Math.max(1, Math.floor(cloud.count / 100));
 
 	for (var p = 0; p < cloud.count; p++) {
+		if (onProgress && p % tick === 0) onProgress("reconstruct", p / cloud.count);
 		if (dropped && dropped[p]) continue;
 		if (N[3 * p] === 0 && N[3 * p + 1] === 0 && N[3 * p + 2] === 0) { skipped++; continue; }
 		var nb = queryNeighbourhood(cloud, p, nbOpts);

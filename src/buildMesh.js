@@ -64,15 +64,21 @@ export function buildMesh(cols, options) {
 	var reconstruct = RECONSTRUCTORS[opts.algorithm];
 	if (!reconstruct) throw new TrimeshBuildError(ERROR_CODES.INVALID_INPUT, "unknown algorithm " + String(opts.algorithm));
 
+	// onProgress(stage, fraction): stages thin, denoise, prepare, reconstruct,
+	// weld, orient, done. Fractions run 0..1 within a stage.
+	var report = typeof opts.onProgress === "function" ? opts.onProgress : function () {};
+
 	var pointsInput = cols && cols.count;
 	var input = cols;
 	if (opts.thin) {
 		if (!(opts.thin > 0)) throw new TrimeshBuildError(ERROR_CODES.INVALID_INPUT, "thin must be a distance > 0");
+		report("thin", 0);
 		input = dedupe(xyzColumns(cols), opts.thin, { z: true });
 	}
 
 	var cloud;
 	if (opts.denoise) {
+		report("denoise", 0);
 		// Smooth in origin-shifted coordinates. The first pass only finds the
 		// origin and spacing (zero normals skip the normal fit); the second
 		// prepares the smoothed points and keeps the first pass's origin.
@@ -84,9 +90,11 @@ export function buildMesh(cols, options) {
 			iterations: d.iterations || 1,
 			maxDistance: d.maxDistance || 5 * first.medianSpacing
 		});
+		report("prepare", 0);
 		cloud = prepareCloud({ count: first.count, positions: smoothed.positions }, Object.assign({}, opts, { origin: { x: 0, y: 0, z: 0 } }));
 		cloud.origin = first.origin;
 	} else {
+		report("prepare", 0);
 		cloud = prepareCloud(input, opts);
 	}
 	var tolerance = cloud.tolerance;
@@ -97,13 +105,16 @@ export function buildMesh(cols, options) {
 	// ids the pool would weld together must not both vote
 	var weldDuplicates = markWeldDuplicates(cloud, constraints, tolerance);
 
+	report("reconstruct", 0);
 	var rec = reconstruct(cloud, constraints, opts);
 
+	report("weld", 0);
 	var bms = ingestToBMS(vertexCoordsOf(cloud, constraints), rec.triangles, tolerance, constraints.firstId);
 	bms.origin = cloud.origin;
 	var weld = cleanSoup(bms, constraints);
 
 	var viewpoints = opts.viewpoints ? opts.viewpoints.map(function (p) { return shiftPoint(p, cloud.origin); }) : null;
+	report("orient", 0);
 	var orient = orientMesh(bms, viewpoints);
 	var mesh = validateMesh(bms, orient.orientation);
 
@@ -128,6 +139,7 @@ export function buildMesh(cols, options) {
 	for (var i = 0; i < cloud.count; i++) {
 		if (cloud.normals[3 * i] === 0 && cloud.normals[3 * i + 1] === 0 && cloud.normals[3 * i + 2] === 0) zeroNormals++;
 	}
+	report("done", 1);
 
 	return {
 		pool: bms.pool,
