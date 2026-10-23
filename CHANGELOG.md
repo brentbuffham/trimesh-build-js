@@ -1,16 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-10-24)
 
 - **Depends on las-laz-js ^0.9.1.**
 - **`buildMeshAsync` fits normals on the workers too,** one slice per worker with `pointNormals({ start, end })`. Each slice matches a full run bit for bit, so the mesh is unchanged. There is a new progress stage, `normals`.
 - **`prepareCloud` option `deferNormals`,** and `cloud.normalOptions`.
-- **WALL.las** (4.3M points, thin 0.1 m to give 1.44M, 8 workers): 38.6 s → 33.7 s.
-
-## 0.3.0 (2026-10-24)
-
 - **Depends on trimesh-boolean ^0.7.7.** Its vertex pool uses numeric cell keys: 2M lookups take 6.6 s instead of 30.4 s.
-- **Overall:** 1M points take 55 s → 14.5 s (24 cores), and peak memory drops 3.8 GB → 1.1 GB. WALL.las (4.3M points, thinned to 0.1 m to give 1.44M) takes 38.6 s on 8 workers.
+- **Overall:** 1M points take 55 s → 14.5 s (24 cores), and peak memory drops 3.8 GB → 1.1 GB. WALL.las (4.3M points, thinned to 0.1 m to give 1.44M) takes 33.7 s on 8 workers.
 - **Faster after `thin`:** `prepareCloud` skips its duplicate-merge passes when the cloud is already thinned (new option `minSpacing`). That saves about 2.4 s per 1M points.
 - **`buildMeshAsync(cols, { workers, createWorker })`** spreads triangulation over worker threads and gives the same mesh as `buildMesh`. Worker scripts: `trimesh-build-js/worker/browser` and `trimesh-build-js/worker/node`. New exports `proposeTriangles` and `acceptProposals`.
 - **Faster vote counting:** typed-array hash tables, no string keys. At 1M points, 9.6 s → 1.1 s.
