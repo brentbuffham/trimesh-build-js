@@ -139,7 +139,7 @@ function insertConstraints(cloud, breaklines, options) {}
 6. **triangulateLocal.** Run `new Delaunator(coords2D)`. If there are constraint edges, run `new Constrainautor(del)` and `constrainOne` for each edge. If Constrainautor throws, fall back to the unconstrained triangulation and count a `constraintFailure`. Keep only the triangles that include patch index 0 (p's umbrella). Drop triangles whose 2D area is below 1e-12 × scale².
 7. **acceptTriangles.** Key each umbrella triangle by its sorted id triple `"a,b,c"` and add 1 to its count in a `Map`.
 
-After all points are done, accept every triangle with at least `minVotes` votes. Break line vertices propose no umbrellas of their own, so a triangle with one break line vertex can reach at most 2 votes and one with two can reach only 1. To keep those triangles, a triangle with two or more break line vertices needs only 1 vote. Every vote it can get comes from a cloud point, so one vote already shows the patch agrees.
+After all points are done, accept every triangle with at least `minVotes` votes. Break line vertices propose no umbrellas of their own, so a triangle with one break line vertex can reach at most 2 votes and one with two can reach only 1. To keep those triangles, a triangle with two or more break line vertices needs only 1 vote. Every vote it can get comes from a cloud point, so one vote already shows the patch agrees. Insertion is greedy, most votes first, never putting a third face on an edge; then a promote pass adds 1-vote triangles that exactly fill a slit (section 9, item 11).
 
 ### 6.5 ingestToBMS
 
@@ -268,3 +268,10 @@ There are also unit tests for each stage: projection frame, umbrella filter, vot
 8. **The reconstruction algorithm is pluggable** through a registry, for ball pivoting and Poisson later.
 9. **Open questions Q1 to Q7 are resolved** as in section 4 and section 6. Q1 is the `breaklineSnap` option, default 1 mm. Q7 falls away: welding is done by the BMS pool, so trimesh-build has no weld stage to tune.
 10. **`WeldSoup` is renamed `cleanSoup`.** The BMS pool does the welding; this step only removes collapsed and duplicate triangles and counts edges.
+11. **Added during implementation:**
+    - **Acceptance is greedy, most votes first.** No triangle may put a third face on an edge. A promote pass then adds a 1-vote triangle that exactly fills a slit (all edges under 2 faces, at least two of them at exactly 1).
+    - **`fillGaps` is a default stage** (`maxGapEdges`, default 6; 0 turns it off). Loops this small are narrower than the point spacing, so they are voting defects, not holes in the data. They are triangulated with trimesh-boolean `triangulateLoop`, with no Steiner points, and `orientMesh` runs again afterwards.
+    - **`thin`** (las-laz-js `dedupe`) and **`denoise`** (las-laz-js `denoisePoints`) are opt-in input conditioning. Raw scans need both: scan-line sampling leaves neighbourhoods collinear, and noise near the spacing splits the votes.
+    - **Outlier test:** a point whose median neighbour distance is more than `maxRadiusMultiplier` × that of its nearest neighbour is skipped.
+    - **Break line vertices enter the BMS pool first,** so the weld never moves a break line.
+    - **Sampling limit:** at the free edges of two close parallel sheets, the neighbourhood sees both edge rows as one strip, so bridging can happen there.

@@ -15,10 +15,12 @@ import { createVertexPool } from "trimesh-boolean";
  * @param {Float64Array} vertexCoords - XYZ of every vertex id
  * @param {Uint32Array} triangles - vertex ids, 3 per triangle
  * @param {number} tolerance - weld distance
+ * @param {number} [seedFrom] - ids >= this (break line vertices) enter the pool first, so the
+ *   weld snaps cloud points onto them and never moves a break line
  * @returns {{pool: Object, soup: Array<Object>, idToPool: Array<Object>}}
  *   idToPool[id] is the PoolVertex an id landed on (only for used ids)
  */
-export function ingestToBMS(vertexCoords, triangles, tolerance) {
+export function ingestToBMS(vertexCoords, triangles, tolerance, seedFrom) {
 	var pool = createVertexPool(tolerance);
 	var idToPool = [];
 	var v = vertexCoords;
@@ -29,6 +31,9 @@ export function ingestToBMS(vertexCoords, triangles, tolerance) {
 			idToPool[id] = pv;
 		}
 		return pv;
+	}
+	if (seedFrom !== undefined) {
+		for (var s = 0; s < triangles.length; s++) if (triangles[s] >= seedFrom) poolOf(triangles[s]);
 	}
 	var soup = [];
 	for (var t = 0; t < triangles.length; t += 3) {
