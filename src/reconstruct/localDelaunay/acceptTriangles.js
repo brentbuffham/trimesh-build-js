@@ -8,7 +8,8 @@
 // can reach only 1 vote: it is accepted at 1.
 //
 // Insertion is greedy, most votes first, and never puts a third
-// face on an edge (cocircular quads can give BOTH diagonals 2 votes).
+// face on an edge (cocircular quads can give BOTH diagonals 2 votes),
+// nor a second face on the same side of an edge as its first.
 //
 // Promote pass: a 1-vote triangle that exactly fills a slit (all
 // three edges under 2 faces, at least two of them at exactly 1) is
@@ -45,20 +46,43 @@ export function createVoteTable() {
 	/**
 	 * @param {number} minVotes
 	 * @param {number} firstBreaklineId - ids >= this are break line vertices
+	 * @param {Float64Array} [coords] - XYZ of every id; enables the same-side test
 	 * @returns {Uint32Array} accepted triangles, 3 ids each
 	 */
-	function accepted(minVotes, firstBreaklineId) {
+	function accepted(minVotes, firstBreaklineId, coords) {
 		var keys = Array.from(table.keys()).sort();
 		var faces = new Map();
+		var thirdOf = new Map(); // edge -> third vertex of its first face
 		var out = [];
 
 		function faceCount(a, b) { return faces.get(edgeId(a, b)) || 0; }
+		// An edge takes a second face only from the OTHER side of its first:
+		// two triangles on one side of an edge overlap (a double cover).
+		function otherSide(a, b, d) {
+			if (!coords) return true;
+			var c = thirdOf.get(edgeId(a, b));
+			if (c === undefined) return true;
+			var C = coords;
+			var ex = C[3 * b] - C[3 * a], ey = C[3 * b + 1] - C[3 * a + 1], ez = C[3 * b + 2] - C[3 * a + 2];
+			var cx = C[3 * c] - C[3 * a], cy = C[3 * c + 1] - C[3 * a + 1], cz = C[3 * c + 2] - C[3 * a + 2];
+			var dx = C[3 * d] - C[3 * a], dy = C[3 * d + 1] - C[3 * a + 1], dz = C[3 * d + 2] - C[3 * a + 2];
+			// n = e x c (first face normal); perp = n x e points from the edge towards c
+			var nx = ey * cz - ez * cy, ny = ez * cx - ex * cz, nz = ex * cy - ey * cx;
+			var px = ny * ez - nz * ey, py = nz * ex - nx * ez, pz = nx * ey - ny * ex;
+			return dx * px + dy * py + dz * pz < 0;
+		}
 		function fits(v) {
-			return faceCount(v[0], v[1]) < 2 && faceCount(v[1], v[2]) < 2 && faceCount(v[2], v[0]) < 2;
+			for (var e = 0; e < 3; e++) {
+				var a = v[e], b = v[(e + 1) % 3], d = v[(e + 2) % 3];
+				var n = faceCount(a, b);
+				if (n >= 2 || (n === 1 && !otherSide(a, b, d))) return false;
+			}
+			return true;
 		}
 		function put(v) {
 			for (var e = 0; e < 3; e++) {
 				var id = edgeId(v[e], v[(e + 1) % 3]);
+				if (!faces.has(id)) thirdOf.set(id, v[(e + 2) % 3]);
 				faces.set(id, (faces.get(id) || 0) + 1);
 			}
 			out.push(v[0], v[1], v[2]);

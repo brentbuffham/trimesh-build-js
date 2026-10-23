@@ -7,8 +7,12 @@
 // median point spacing, so it always fits inside a patch and every
 // patch that sees it sees the same ids (no patch-local Steiners).
 //
-// Rejected: two break lines that cross, or that touch where one is
-// not at an endpoint (a T). Endpoint-to-endpoint junctions are fine.
+// Vertices closer than the weld tolerance are merged globally first, so
+// lines meeting at an endpoint share one id and dense digitising cannot
+// collapse in the weld.
+//
+// Rejected: two break lines that cross, or that touch away from a shared
+// vertex (a T). Junctions at a shared vertex are fine.
 // Cloud points within breaklineSnap of a line are dropped so they
 // cannot form slivers against it.
 //=============================================================
@@ -16,8 +20,6 @@
 import { buildIndex, pointsInRadius } from "las-laz-js";
 import { edgeKey } from "trimesh-boolean";
 import { TrimeshBuildError, ERROR_CODES } from "../errors.js";
-
-var ENDPOINT_EPS = 1e-9;
 
 /**
  * @typedef {Object} ConstraintSet
@@ -79,7 +81,6 @@ function segSeg(p0, p1, q0, q1) {
 
 function dot(u, v) { return u[0] * v[0] + u[1] * v[1] + u[2] * v[2]; }
 function clamp(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
-function atEnd(x) { return x < ENDPOINT_EPS || x > 1 - ENDPOINT_EPS; }
 
 function pointSegDist(px, py, pz, a, b) {
 	var dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2];
@@ -89,54 +90,92 @@ function pointSegDist(px, py, pz, a, b) {
 	return Math.sqrt(ex * ex + ey * ey + ez * ez);
 }
 
-// Original (unsplit) segments, origin-shifted: { line, seg, a, b, lo, hi }
-function originalSegments(cloud, breaklines) {
+// Break line vertices, origin-shifted and merged globally: any two closer
+// than tol get ONE id, so lines meeting at an endpoint share it, a repeated
+// vertex or a closed loop that repeats its first vertex adds nothing, and a
+// densely digitised line is thinned to vertices at least tol apart (the BMS
+// pool would weld closer ones and collapse the segment between them).
+// Returns merged polylines: { line, closed, ids: [vertexIndex], orig: [original vertex index] }
+function mergedPolylines(cloud, breaklines, tol, vertices) {
 	var o = [cloud.origin.x, cloud.origin.y, cloud.origin.z];
-	var out = [];
+	var grid = new Map(), cell = tol;
+	function keyOf(ix, iy, iz) { return ix + "," + iy + "," + iz; }
+	function merge(p) {
+		var cx = Math.floor(p[0] / cell), cy = Math.floor(p[1] / cell), cz = Math.floor(p[2] / cell);
+		var best = -1, bd = tol;
+		for (var dx = -1; dx <= 1; dx++) for (var dy = -1; dy <= 1; dy++) for (var dz = -1; dz <= 1; dz++) {
+			var list = grid.get(keyOf(cx + dx, cy + dy, cz + dz));
+			if (!list) continue;
+			for (var i = 0; i < list.length; i++) {
+				var q = vertices[list[i]];
+				var d = Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]);
+				if (d < bd) { bd = d; best = list[i]; }
+			}
+		}
+		if (best >= 0) return best;
+		vertices.push(p);
+		var k = keyOf(cx, cy, cz);
+		if (!grid.has(k)) grid.set(k, []);
+		grid.get(k).push(vertices.length - 1);
+		return vertices.length - 1;
+	}
+	var lines = [];
 	for (var L = 0; L < breaklines.length; L++) {
 		var bl = breaklines[L];
 		if (!bl || !Array.isArray(bl.vertices)) throw new TrimeshBuildError(ERROR_CODES.INVALID_INPUT, "breakline " + L + " needs a vertices array");
-		var vs = bl.vertices.map(function (v, i) {
+		var ids = [], orig = [];
+		for (var i = 0; i < bl.vertices.length; i++) {
+			var v = bl.vertices[i];
 			if (!v || !isFinite(v[0]) || !isFinite(v[1]) || !isFinite(v[2])) {
 				throw new TrimeshBuildError(ERROR_CODES.INVALID_INPUT, "breakline " + L + " vertex " + i + " is not a finite [x, y, z]");
 			}
-			return [v[0] - o[0], v[1] - o[1], v[2] - o[2]];
-		});
-		var n = vs.length, segCount = bl.closedLoop ? n : n - 1;
-		for (var s = 0; s < segCount; s++) {
-			var a = vs[s], b = vs[(s + 1) % n];
-			if (a[0] === b[0] && a[1] === b[1] && a[2] === b[2]) continue;
+			var id = merge([v[0] - o[0], v[1] - o[1], v[2] - o[2]]);
+			if (ids.length && ids[ids.length - 1] === id) continue;
+			ids.push(id);
+			orig.push(i);
+		}
+		var closed = !!bl.closedLoop;
+		if (closed && ids.length > 2 && ids[ids.length - 1] === ids[0]) { ids.pop(); orig.pop(); }
+		if (ids.length >= 2) lines.push({ line: L, closed: closed && ids.length > 2, ids: ids, orig: orig });
+	}
+	return lines;
+}
+
+// Segments of the merged polylines: { line, seg (original segment index), a, b, ia, ib, lo, hi }
+function segmentsOf(lines, vertices) {
+	var out = [];
+	lines.forEach(function (pl) {
+		var n = pl.ids.length, count = pl.closed ? n : n - 1;
+		for (var s = 0; s < count; s++) {
+			var ia = pl.ids[s], ib = pl.ids[(s + 1) % n];
+			var a = vertices[ia], b = vertices[ib];
 			out.push({
-				line: L, seg: s, a: a, b: b, closed: !!bl.closedLoop, segCount: segCount,
+				line: pl.line, seg: pl.orig[s], a: a, b: b, ia: ia, ib: ib,
 				lo: [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.min(a[2], b[2])],
 				hi: [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.max(a[2], b[2])]
 			});
 		}
-	}
+	});
 	return out;
 }
 
-function adjacent(x, y) {
-	if (x.line !== y.line) return false;
-	var d = Math.abs(x.seg - y.seg);
-	return d === 1 || (x.closed && d === x.segCount - 1);
-}
-
+// Two segments that share a merged vertex meet there by construction (a
+// junction or neighbours along a line); any other pair closer than tol is a
+// crossing or a T.
 function checkCrossings(segs, tol) {
 	for (var i = 0; i < segs.length; i++) {
 		var x = segs[i];
 		for (var j = i + 1; j < segs.length; j++) {
 			var y = segs[j];
-			if (adjacent(x, y)) continue;
+			if (x.ia === y.ia || x.ia === y.ib || x.ib === y.ia || x.ib === y.ib) continue;
 			if (x.lo[0] > y.hi[0] + tol || y.lo[0] > x.hi[0] + tol ||
 				x.lo[1] > y.hi[1] + tol || y.lo[1] > x.hi[1] + tol ||
 				x.lo[2] > y.hi[2] + tol || y.lo[2] > x.hi[2] + tol) continue;
 			var r = segSeg(x.a, x.b, y.a, y.b);
 			if (r.d >= tol) continue;
-			if (atEnd(r.s) && atEnd(r.t)) continue; // endpoint junction
 			throw new TrimeshBuildError(ERROR_CODES.CROSSING_BREAKLINES,
 				"breakline " + x.line + " segment " + x.seg + " meets breakline " + y.line + " segment " + y.seg +
-				" away from an endpoint (" + r.d.toExponential(2) + " apart); split or move one of them");
+				" away from a shared vertex (" + r.d.toExponential(2) + " apart); split or move one of them");
 		}
 	}
 }
@@ -150,50 +189,39 @@ function checkCrossings(segs, tol) {
 export function insertConstraints(cloud, breaklines, options) {
 	if (!breaklines || breaklines.length === 0) return EMPTY_CONSTRAINTS(cloud);
 	var opts = options || {};
-	var tol = opts.tolerance !== undefined ? opts.tolerance : Math.max(0.001, 0.25 * cloud.medianSpacing);
+	var tol = opts.tolerance !== undefined ? opts.tolerance : (cloud.tolerance || Math.max(0.001, 0.25 * cloud.medianSpacing));
 	var snap = opts.breaklineSnap !== undefined ? opts.breaklineSnap : 0.001;
 	var maxLen = cloud.medianSpacing;
 
-	var segs = originalSegments(cloud, breaklines);
+	var vertices = [];
+	var lines = mergedPolylines(cloud, breaklines, tol, vertices);
+	var segs = segmentsOf(lines, vertices);
 	checkCrossings(segs, tol);
 
-	// Split into pieces no longer than the median spacing; shared vertices
-	// between consecutive segments of a line get one id.
-	var coords = [];
-	var segOut = [];
+	// Merged vertices keep their index as id offset; each segment is then split
+	// into pieces no longer than the median spacing with ids of its own.
 	var firstId = cloud.count;
-	function newVertex(p) {
-		coords.push(p[0], p[1], p[2]);
-		return firstId + coords.length / 3 - 1;
-	}
-	// Walk each line's segments in order; a segment starts where the last
-	// one ended, and a closed loop's last segment ends on the first vertex.
-	var byLine = new Map();
-	segs.forEach(function (sg) {
-		if (!byLine.has(sg.line)) byLine.set(sg.line, []);
-		byLine.get(sg.line).push(sg);
-	});
-	byLine.forEach(function (list) {
-		var firstVertex = -1, prevEnd = null, prevEndId = -1;
-		for (var i = 0; i < list.length; i++) {
-			var sg = list[i];
-			var startId = prevEnd === sg.a ? prevEndId : newVertex(sg.a);
-			if (firstVertex < 0) firstVertex = startId;
-			var closesLoop = sg.closed && i === list.length - 1 && sg.b === list[0].a;
-			var len = Math.hypot(sg.b[0] - sg.a[0], sg.b[1] - sg.a[1], sg.b[2] - sg.a[2]);
-			var pieces = Math.max(1, Math.ceil(len / maxLen - 1e-9));
-			var prev = startId;
-			for (var p = 1; p <= pieces; p++) {
+	var coords = [];
+	for (var v = 0; v < vertices.length; v++) coords.push(vertices[v][0], vertices[v][1], vertices[v][2]);
+	var segOut = [];
+	for (var i = 0; i < segs.length; i++) {
+		var sg = segs[i];
+		var len = Math.hypot(sg.b[0] - sg.a[0], sg.b[1] - sg.a[1], sg.b[2] - sg.a[2]);
+		var pieces = Math.max(1, Math.ceil(len / maxLen - 1e-9));
+		var prev = firstId + sg.ia;
+		for (var p = 1; p <= pieces; p++) {
+			var id;
+			if (p === pieces) id = firstId + sg.ib;
+			else {
 				var f = p / pieces;
-				var id = p === pieces && closesLoop ? firstVertex
-					: newVertex([sg.a[0] + (sg.b[0] - sg.a[0]) * f, sg.a[1] + (sg.b[1] - sg.a[1]) * f, sg.a[2] + (sg.b[2] - sg.a[2]) * f]);
-				segOut.push(prev, id);
-				prev = id;
+				coords.push(sg.a[0] + (sg.b[0] - sg.a[0]) * f, sg.a[1] + (sg.b[1] - sg.a[1]) * f, sg.a[2] + (sg.b[2] - sg.a[2]) * f);
+				id = firstId + coords.length / 3 - 1;
 			}
-			prevEnd = sg.b;
-			prevEndId = prev;
+			segOut.push(prev, id);
+			prev = id;
 		}
-	});
+	}
+
 
 	var m = coords.length / 3;
 	var coordArr = Float64Array.from(coords);

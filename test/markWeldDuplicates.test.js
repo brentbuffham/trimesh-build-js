@@ -13,13 +13,12 @@ function withPoints(extra) {
 }
 
 describe("markWeldDuplicates", function () {
-	it("drops a cloud point within tolerance of an earlier one", function () {
-		var c = withPoints([2.01, 2, 0]); // 1 cm from grid point (2, 2)
+	it("prepareCloud merges a cloud point within tolerance of an earlier one", function () {
+		var c = withPoints([2.01, 2, 0]); // 1 cm from grid point (2, 2); tolerance 0.125
+		expect(c.count).toBe(400);
+		expect(c.mergedAtTolerance).toBe(1);
 		var cons = EMPTY_CONSTRAINTS(c);
-		var n = markWeldDuplicates(c, cons, 0.05);
-		expect(n).toBe(1);
-		expect(cons.dropped[c.count - 1]).toBe(1);
-		expect(cons.dropped.reduce(function (s, v) { return s + v; }, 0)).toBe(1);
+		expect(markWeldDuplicates(c, cons, c.tolerance)).toBe(0);
 	});
 
 	it("drops a cloud point within tolerance of a break line vertex", function () {

@@ -48,7 +48,7 @@ export function runLocalDelaunay(cloud, constraints, options) {
 		ids = bridgingGuard(cloud, p, ids, plane, vc, options);
 		if (ids.length < options.minNeighbours) { skipped++; continue; }
 
-		var uv = projectToPlane(plane, ids, vc);
+		var uv = projectToPlane(plane, ids, vc, p);
 		var edges = clipConstraints(ids, constraints);
 		var r = triangulateLocal(uv, ids, p, plane.scale, edges);
 		if (r.constraintFailure) failures++;
@@ -56,7 +56,7 @@ export function runLocalDelaunay(cloud, constraints, options) {
 		used++;
 	}
 
-	var triangles = votes.accepted(options.minVotes, cloud.count);
+	var triangles = votes.accepted(options.minVotes, cloud.count, vc);
 	return {
 		triangles: triangles,
 		report: {

@@ -39,13 +39,15 @@ export function triangulateLocal(coords2D, patchIds, sourceId, scale, edges2D) {
 	}
 
 	var T = del.triangles;
+	// area on the real projection (the tie-break offsets would hide collinear points)
+	var A = coords2D.exact || coords2D;
 	var minArea2 = 2 * MIN_AREA_FACTOR * scale * scale;
 	var out = [];
 	for (var t = 0; t < T.length; t += 3) {
 		var a = T[t], b = T[t + 1], c = T[t + 2];
 		if (a !== 0 && b !== 0 && c !== 0) continue;
-		var ax = coords2D[2 * a], ay = coords2D[2 * a + 1];
-		var cross = (coords2D[2 * b] - ax) * (coords2D[2 * c + 1] - ay) - (coords2D[2 * b + 1] - ay) * (coords2D[2 * c] - ax);
+		var ax = A[2 * a], ay = A[2 * a + 1];
+		var cross = (A[2 * b] - ax) * (A[2 * c + 1] - ay) - (A[2 * b + 1] - ay) * (A[2 * c] - ax);
 		if (Math.abs(cross) < minArea2) continue;
 		out.push(a === 0 ? sourceId : patchIds[a - 1], b === 0 ? sourceId : patchIds[b - 1], c === 0 ? sourceId : patchIds[c - 1]);
 	}

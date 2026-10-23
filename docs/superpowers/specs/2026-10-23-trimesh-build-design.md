@@ -275,3 +275,11 @@ There are also unit tests for each stage: projection frame, umbrella filter, vot
     - **Outlier test:** a point whose median neighbour distance is more than `maxRadiusMultiplier` × that of its nearest neighbour is skipped.
     - **Break line vertices enter the BMS pool first,** so the weld never moves a break line.
     - **Sampling limit:** at the free edges of two close parallel sheets, the neighbourhood sees both edge rows as one strip, so bridging can happen there.
+12. **Fixed after the final review:**
+    - **`thin` is 3D** (`dedupe` with `{ z: true }`). In XY it deleted roofs, floors and hole walls.
+    - **A Float32 cloud given with `origin` is used as already shifted.** It is no longer shifted a second time.
+    - **`prepareCloud` merges exact duplicates, then points closer than the weld tolerance, before building the index and normals,** so duplicates cannot hide the spacing or fill kNN slots. `tolerance` becomes a `prepareCloud` output.
+    - **Break line vertices closer than the tolerance are merged globally before splitting.** Junctions then share one id, repeated or closing vertices add nothing, and dense digitising cannot collapse. The crossing check skips segment pairs that share a vertex.
+    - **Acceptance never adds a second face on the same side of an edge as its first.**
+    - **Patch triangulation breaks cocircular ties with a fixed per-id offset of 1e-7 × scale,** for the 2D triangulation only. The area filter uses the unoffset projection.
+    - **Bad `tolerance`, `origin` or viewpoints throw `TrimeshBuildError`.**

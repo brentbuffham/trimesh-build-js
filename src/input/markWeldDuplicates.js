@@ -8,10 +8,10 @@
 // rule of acceptance is broken behind its back (seen on a break
 // line: a cloud point 6 cm from a break line vertex).
 //
-// So, before reconstruction, drop:
-//   - cloud points within tolerance of a break line vertex
-//     (the break line wins: it is never moved);
-//   - cloud points within tolerance of an earlier kept cloud point.
+// So, before reconstruction, drop cloud points within tolerance of a
+// break line vertex (the break line wins: it is never moved).
+// Cloud points closer than tolerance to each other were already merged
+// by prepareCloud.
 // Dropped points take no part in any patch.
 //=============================================================
 
@@ -26,7 +26,7 @@ import { pointsInRadius } from "las-laz-js";
 export function markWeldDuplicates(cloud, constraints, tolerance) {
 	if (!constraints.dropped) constraints.dropped = new Uint8Array(cloud.count);
 	var dropped = constraints.dropped;
-	var C = cloud.coords, B = constraints.coords;
+	var B = constraints.coords;
 	var n = 0;
 
 	for (var b = 0; b < constraints.count; b++) {
@@ -36,13 +36,5 @@ export function markWeldDuplicates(cloud, constraints, tolerance) {
 		}
 	}
 
-	for (var p = 0; p < cloud.count; p++) {
-		if (dropped[p]) continue;
-		var close = pointsInRadius(cloud.index, [C[3 * p], C[3 * p + 1], C[3 * p + 2]], tolerance);
-		for (var j = 0; j < close.length; j++) {
-			var q = close[j];
-			if (q > p && !dropped[q]) { dropped[q] = 1; n++; }
-		}
-	}
 	return n;
 }

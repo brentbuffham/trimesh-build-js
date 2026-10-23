@@ -35,7 +35,7 @@ var pts = await las.readPoints({ fields: ["x", "y", "z"] });
 var result = buildMesh(
 	{ count: pts.count, x: pts.x, y: pts.y, z: pts.z },
 	{
-		thin: 0.03,                    // raw scans: even out scan-line sampling (metres)
+		thin: 0.05,                    // raw scans: even out scan-line sampling (metres, 3D)
 		denoise: { iterations: 3 },    // raw scans: smooth before meshing
 		viewpoints: [[x, y, z]],       // scanner positions (in the void), if known
 		breaklines: [{ vertices: [[x, y, z], ...], closedLoop: false }]
@@ -59,15 +59,15 @@ var indexed = toIndexed(result);   // { positions: Float64Array (world), index: 
 
 Scanners sample densely along scan lines, often about 1 mm apart, and LAS files round coordinates (often to 1 mm). A point's nearest neighbours then lie on one line, and no plane fits them. Use `thin` to even out the spacing (it calls las-laz-js `dedupe`). Then use `denoise` to bring the noise well below the spacing (it calls las-laz-js `denoisePoints`).
 
-On a 1-million-point blast-hole scan, thinning to 3 cm and three denoise passes cut the noise from 1.3 cm to 0.13 cm, and the open loops from 3,711 to under 200, in about 3 s.
+Two blast-hole scans of about 1 million points each, thinned to 5 cm (about 16,000 points), went from 511 and 477 open loops without denoising to 87 and 65 with three denoise passes. Both had no non-manifold edges and took under 3 s. Keep the thinning spacing well above the scan noise: at 3 cm, on the same scans with 1.3 cm of noise, patches disagree and the mesh folds.
 
 ## Options
 
 | Option | Default | Meaning |
 |---|---|---|
-| `origin` | cloud centroid | Shift applied before any work. Required for a Float32 cloud. |
+| `origin` | cloud centroid | Shift applied before any work. Required for a Float32 cloud, whose values must already be world − origin. |
 | `normals` | computed | Per-point normals (3 per point). The sign is ignored. |
-| `thin` | off | Minimum point spacing, via las-laz-js `dedupe`. |
+| `thin` | off | Minimum 3D point spacing, via las-laz-js `dedupe`. |
 | `denoise` | off | `true` or `{ method, iterations, k, maxDistance }` for las-laz-js `denoisePoints`. |
 | `breaklines` | none | `[{ vertices: [[x,y,z], ...], closedLoop }]`, world coordinates. |
 | `viewpoints` | none | Scanner positions; normals face the nearest one. |
@@ -77,7 +77,7 @@ On a 1-million-point blast-hole scan, thinning to 3 cm and three denoise passes 
 | `normalAgreement` | 0.5 | Bridging guard: drop neighbours with \|n·n\| below this. |
 | `maxPlaneOffset` | 0.5 | Bridging guard: drop neighbours further than this × scale off the plane. |
 | `minVotes` | 2 | Patches that must agree on a triangle. |
-| `tolerance` | max(1 mm, 0.25 × spacing) | Weld distance. |
+| `tolerance` | max(1 mm, 0.25 × spacing) | Weld distance. Input points closer than this are merged before meshing, and so are break line vertices. |
 | `breaklineSnap` | 0.001 | Cloud points this close to a break line are dropped (world units). |
 | `maxGapEdges` | 6 | Voting gaps up to this many edges are filled. 0 turns it off. |
 | `closeHoles` | `false` | `{ maxLoopEdges }`: fill real holes with a centroid fan. |
@@ -95,7 +95,7 @@ Normals are flipped for each connected component:
 ## Known limits
 
 - **Close walls.** Two walls closer than about the point spacing can't be told apart locally. At the free edges of two close parallel sheets, the patch sees both edge rows as one strip, so bridging can happen there, even at 2 × spacing.
-- **Break line junctions.** Two break lines may share an endpoint. A break line ending on another line's interior (a T-junction) is rejected like a crossing; split the other line at that point.
+- **Break line junctions.** Break lines may meet at a shared vertex (vertices closer than the weld tolerance are merged). A break line ending on another line's interior (a T-junction) is rejected like a crossing; add a vertex to the other line at that point.
 - **Deferred:** ball pivoting and screened Poisson (as extra algorithms), decimation, smoothing, tiling of very large clouds, adaptive k.
 
 ## Tests

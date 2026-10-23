@@ -7,6 +7,14 @@ import { fibonacciSphere, cylinderTunnel, halfPipe, parallelWalls, sphereWithCap
 var SPHERE_V = 4 / 3 * Math.PI * 125;
 var REAL = "C:/Users/brent/OneDrive/BHP/CLOUDCOMPARE/HOLETRIMMED - Cloud.laz";
 
+// standard deviation of mesh vertex distance from the world origin
+function radialSpread(r) {
+	var o = r.origin, d = [];
+	r.pool.getAll().forEach(function (v) { d.push(Math.hypot(v.x + o.x, v.y + o.y, v.z + o.z)); });
+	var m = d.reduce(function (s, x) { return s + x; }, 0) / d.length;
+	return Math.sqrt(d.reduce(function (s, x) { return s + (x - m) * (x - m); }, 0) / d.length);
+}
+
 function crownLine() {
 	return { vertices: [[0, 0, 2.5], [10, 0, 2.5]], closedLoop: false };
 }
@@ -140,16 +148,18 @@ describe("buildMesh", function () {
 		var dn = buildMesh(s, { denoise: { iterations: 3 } });
 		expect(dn.report.denoised).toBe(true);
 		expect(raw.report.denoised).toBe(false);
-		expect(dn.mesh.boundaryLoops.length).toBeLessThan(raw.mesh.boundaryLoops.length);
+		// what denoise is for: less radial scatter in the mesh vertices
+		expect(radialSpread(dn)).toBeLessThan(0.6 * radialSpread(raw));
+		expect(dn.mesh.closed).toBe(true);
 		expect(dn.mesh.nonManifoldEdgeCount).toBe(0);
 	});
 
-	it.skipIf(!existsSync(REAL))("real LAZ (HOLETRIMMED, thin 3 cm + denoise)", async function () {
+	it.skipIf(!existsSync(REAL))("real LAZ (HOLETRIMMED, thin 5 cm + denoise)", async function () {
 		var las = await openLas(REAL);
 		var pts = await las.readPoints({ fields: ["x", "y", "z"] });
-		var r = buildMesh({ count: pts.count, x: pts.x, y: pts.y, z: pts.z }, { thin: 0.03, denoise: { iterations: 3 } });
-		expect(r.report.trianglesAccepted).toBeGreaterThan(50000);
+		var r = buildMesh({ count: pts.count, x: pts.x, y: pts.y, z: pts.z }, { thin: 0.05, denoise: { iterations: 3 } });
+		expect(r.report.trianglesAccepted).toBeGreaterThan(25000);
 		expect(r.mesh.nonManifoldEdgeCount).toBe(0);
-		expect(r.mesh.boundaryLoops.length).toBeLessThan(400);
+		expect(r.mesh.boundaryLoops.length).toBeLessThan(150);
 	}, 120000);
 });

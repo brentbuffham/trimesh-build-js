@@ -262,7 +262,7 @@ $("source").addEventListener("change", function () {
 	currentSource = null;
 	var isFile = $("source").value === "file";
 	// raw scans need thinning and denoising; synthetic clouds do not
-	$("thin").value = isFile ? "0.03" : "0";
+	$("thin").value = isFile ? "0.05" : "0";
 	$("denoise").value = isFile ? "3" : "0";
 	$("viewpoint").checked = !isFile && $("source").value !== "walls";
 	if (isFile) $("file").click();

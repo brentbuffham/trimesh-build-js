@@ -9,12 +9,17 @@
 // Builds the las-laz-js neighbour index on the shifted coordinates,
 // estimates the median point spacing from a sample, and takes the
 // caller's normals or computes them with las-laz-js pointNormals.
+// Points closer than the weld tolerance are merged first (3D), so the
+// pool never welds two ids that both voted.
 //=============================================================
 
-import { buildIndex, nearestPoints, pointNormals } from "las-laz-js";
+import { buildIndex, nearestPoints, pointNormals, dedupeSelection } from "las-laz-js";
 import { TrimeshBuildError, ERROR_CODES } from "../errors.js";
 
 var SPACING_SAMPLE = 10000;
+var SPACING_LOOK = 8;        // neighbours searched past exact duplicates
+var DISTINCT = 1e-9;        // closer than this is the same point
+var MIN_TOLERANCE = 0.001;  // 1 mm floor on the default weld tolerance
 
 /**
  * @typedef {Object} PreparedCloud
@@ -24,7 +29,9 @@ var SPACING_SAMPLE = 10000;
  * @property {{min: number[], max: number[]}} bounds - shifted
  * @property {Object} index - las-laz-js PointIndex over coords
  * @property {Float32Array} normals - 3 per point; sign not meaningful
- * @property {number} medianSpacing
+ * @property {number} medianSpacing - of distinct points
+ * @property {number} tolerance - weld distance (default max(1 mm, 0.25 x spacing))
+ * @property {number} mergedAtTolerance - input points merged into a neighbour closer than tolerance
  */
 
 function bad(code, message) {
@@ -54,25 +61,60 @@ function median(values) {
 }
 
 /**
- * Median nearest-neighbour distance over an even stride of up to 10,000 points.
+ * Median distance to the nearest DISTINCT neighbour over an even stride of up
+ * to 10,000 points. Exact duplicates are looked past (up to 8 neighbours), so a
+ * cloud where every point has a twin still gets its real spacing.
  * @param {Object} index - las-laz-js PointIndex
  * @param {Float64Array} coords
  * @param {number} count
- * @returns {number}
+ * @returns {number} NaN when no sampled point has a distinct neighbour
  */
 export function estimateMedianSpacing(index, coords, count) {
 	var step = Math.max(1, Math.floor(count / SPACING_SAMPLE));
 	var d = [];
 	for (var i = 0; i < count; i += step) {
-		var r = nearestPoints(index, [coords[3 * i], coords[3 * i + 1], coords[3 * i + 2]], 2);
-		if (r.d.length === 2 && r.d[1] > 0) d.push(r.d[1]);
+		var r = nearestPoints(index, [coords[3 * i], coords[3 * i + 1], coords[3 * i + 2]], SPACING_LOOK);
+		for (var j = 1; j < r.d.length; j++) {
+			if (r.d[j] > DISTINCT) { d.push(r.d[j]); break; }
+		}
 	}
 	return median(d);
 }
 
+// las-laz-js dedupe reads x, y, z columns
+function xyzOf(coords, n) {
+	var x = new Float64Array(n), y = new Float64Array(n), z = new Float64Array(n);
+	for (var i = 0; i < n; i++) { x[i] = coords[3 * i]; y[i] = coords[3 * i + 1]; z[i] = coords[3 * i + 2]; }
+	return { count: n, x: x, y: y, z: z };
+}
+
+// Keep only the selected points (and their caller normals)
+function compact(coords, normals, sel) {
+	if (sel.length === coords.length / 3) return { coords: coords, normals: normals, count: sel.length };
+	var kc = new Float64Array(3 * sel.length);
+	var kn = normals ? new Float32Array(3 * sel.length) : null;
+	for (var s = 0; s < sel.length; s++) {
+		var q = sel[s];
+		for (var a = 0; a < 3; a++) {
+			kc[3 * s + a] = coords[3 * q + a];
+			if (kn) kn[3 * s + a] = normals[3 * q + a];
+		}
+	}
+	return { coords: kc, normals: kn, count: sel.length };
+}
+
+function finiteOr(o, name) {
+	if (!o || !isFinite(o.x) || !isFinite(o.y) || !isFinite(o.z)) {
+		throw bad(ERROR_CODES.INVALID_INPUT, name + " must be { x, y, z } with finite numbers");
+	}
+	return { x: o.x, y: o.y, z: o.z };
+}
+
 /**
- * @param {Object} cols - las-laz-js columns: { count, positions } or { count, x, y, z }
- * @param {{origin?: {x: number, y: number, z: number}, normals?: Float32Array, k?: number, maxRadiusMultiplier?: number}} [options]
+ * @param {Object} cols - las-laz-js columns: { count, positions } or { count, x, y, z }.
+ *   Float64: world coordinates. Float32: already shifted by options.origin (required).
+ * @param {{origin?: {x: number, y: number, z: number}, normals?: Float32Array, tolerance?: number,
+ *   k?: number, maxRadiusMultiplier?: number}} [options]
  * @returns {PreparedCloud}
  */
 export function prepareCloud(cols, options) {
@@ -83,6 +125,12 @@ export function prepareCloud(cols, options) {
 	if (rd.isFloat32 && !opts.origin) {
 		throw bad(ERROR_CODES.NEEDS_ORIGIN, "a Float32 cloud cannot hold mine coordinates; pass options.origin (the shift it was written with)");
 	}
+	if (opts.tolerance !== undefined && !(opts.tolerance > 0 && isFinite(opts.tolerance))) {
+		throw bad(ERROR_CODES.INVALID_INPUT, "tolerance must be a finite distance > 0");
+	}
+	if (opts.normals && opts.normals.length !== 3 * n) {
+		throw bad(ERROR_CODES.INVALID_INPUT, "options.normals must have 3 x count values");
+	}
 	for (var i = 0; i < n; i++) {
 		for (var a = 0; a < 3; a++) {
 			if (!isFinite(rd.get(i, a))) throw bad(ERROR_CODES.INVALID_INPUT, "point " + i + " has a non-finite coordinate");
@@ -91,7 +139,7 @@ export function prepareCloud(cols, options) {
 
 	var origin;
 	if (opts.origin) {
-		origin = { x: opts.origin.x, y: opts.origin.y, z: opts.origin.z };
+		origin = finiteOr(opts.origin, "origin");
 	} else {
 		// Mean relative to point 0, so the running sum stays small at UTM scale
 		var bx = rd.get(0, 0), by = rd.get(0, 1), bz = rd.get(0, 2);
@@ -100,30 +148,46 @@ export function prepareCloud(cols, options) {
 		origin = { x: bx + sx / n, y: by + sy / n, z: bz + sz / n };
 	}
 
+	// Float32 values are already world - origin; Float64 values are world
+	var o = rd.isFloat32 ? [0, 0, 0] : [origin.x, origin.y, origin.z];
 	var coords = new Float64Array(3 * n);
-	var min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
-	var o = [origin.x, origin.y, origin.z];
 	for (var j = 0; j < n; j++) {
-		for (var b = 0; b < 3; b++) {
-			var v = rd.get(j, b) - o[b];
-			coords[3 * j + b] = v;
-			if (v < min[b]) min[b] = v;
-			if (v > max[b]) max[b] = v;
+		for (var b = 0; b < 3; b++) coords[3 * j + b] = rd.get(j, b) - o[b];
+	}
+
+	// Exact duplicates first (they hide the real spacing), then everything the
+	// BMS pool would weld: two ids it merges must not both vote, nor fill each
+	// other's kNN slots. Both merges are 3D and happen before the index and normals.
+	var normals = opts.normals;
+	var total = n;
+	var c0 = compact(coords, normals, dedupeSelection(xyzOf(coords, n), DISTINCT, { z: true }).keep);
+	coords = c0.coords; normals = c0.normals; n = c0.count;
+	var medianSpacing = estimateMedianSpacing(buildIndex({ count: n, positions: coords }), coords, n);
+	if (n < 3 || !(medianSpacing > 0)) throw bad(ERROR_CODES.TOO_FEW_POINTS, "only " + n + " distinct points");
+	var tolerance = opts.tolerance !== undefined ? opts.tolerance : Math.max(MIN_TOLERANCE, 0.25 * medianSpacing);
+	var c1 = compact(coords, normals, dedupeSelection(xyzOf(coords, n), tolerance, { z: true }).keep);
+	var spacingChanged = c1.count !== n;
+	coords = c1.coords; normals = c1.normals; n = c1.count;
+	var merged = total - n;
+	if (n < 3) throw bad(ERROR_CODES.TOO_FEW_POINTS, "only " + n + " points are further apart than the weld tolerance");
+	var min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+	for (var p = 0; p < n; p++) {
+		for (var c = 0; c < 3; c++) {
+			var v = coords[3 * p + c];
+			if (v < min[c]) min[c] = v;
+			if (v > max[c]) max[c] = v;
 		}
 	}
 
 	var shifted = { count: n, positions: coords };
 	var index = buildIndex(shifted);
-	var medianSpacing = estimateMedianSpacing(index, coords, n);
+	if (spacingChanged) medianSpacing = estimateMedianSpacing(index, coords, n);
 
-	var normals = opts.normals;
 	if (!normals) {
 		// k = 20 reaches about 2.5 spacings; 4x the cull multiple leaves room
 		var k = opts.k || 20;
 		var mult = opts.maxRadiusMultiplier || 3;
 		normals = pointNormals(shifted, { k: k, maxDistance: mult * medianSpacing * 4 }).normal;
-	} else if (normals.length !== 3 * n) {
-		throw bad(ERROR_CODES.INVALID_INPUT, "options.normals must have 3 x count values");
 	}
 
 	return {
@@ -133,6 +197,8 @@ export function prepareCloud(cols, options) {
 		bounds: { min: min, max: max },
 		index: index,
 		normals: normals,
-		medianSpacing: medianSpacing
+		medianSpacing: medianSpacing,
+		tolerance: tolerance,
+		mergedAtTolerance: merged
 	};
 }

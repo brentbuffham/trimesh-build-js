@@ -47,6 +47,9 @@ function xyzColumns(cols) {
 }
 
 function shiftPoint(p, o) {
+	if (!p || !isFinite(p[0]) || !isFinite(p[1]) || !isFinite(p[2])) {
+		throw new TrimeshBuildError(ERROR_CODES.INVALID_INPUT, "each viewpoint must be a finite [x, y, z]");
+	}
 	return [p[0] - o.x, p[1] - o.y, p[2] - o.z];
 }
 
@@ -65,7 +68,7 @@ export function buildMesh(cols, options) {
 	var input = cols;
 	if (opts.thin) {
 		if (!(opts.thin > 0)) throw new TrimeshBuildError(ERROR_CODES.INVALID_INPUT, "thin must be a distance > 0");
-		input = dedupe(xyzColumns(cols), opts.thin);
+		input = dedupe(xyzColumns(cols), opts.thin, { z: true });
 	}
 
 	var cloud;
@@ -86,7 +89,7 @@ export function buildMesh(cols, options) {
 	} else {
 		cloud = prepareCloud(input, opts);
 	}
-	var tolerance = opts.tolerance !== undefined ? opts.tolerance : Math.max(0.001, 0.25 * cloud.medianSpacing);
+	var tolerance = cloud.tolerance;
 
 	var constraints = opts.breaklines && opts.breaklines.length
 		? insertConstraints(cloud, opts.breaklines, { tolerance: tolerance, breaklineSnap: opts.breaklineSnap })
@@ -134,7 +137,8 @@ export function buildMesh(cols, options) {
 		unfilledLoops: unfilled,
 		report: {
 			pointsInput: pointsInput,
-			pointsAfterThin: cloud.count,
+			pointsAfterThin: input.count,
+			pointsMergedAtTolerance: cloud.mergedAtTolerance,
 			denoised: !!opts.denoise,
 			medianSpacing: cloud.medianSpacing,
 			tolerance: tolerance,
