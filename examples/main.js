@@ -181,7 +181,7 @@ function showReport(d, ms) {
 		["median spacing", r.medianSpacing], ["weld tolerance", r.tolerance], ["zero normals", r.zeroNormals],
 		["points used", r.pointsUsed], ["points skipped", r.pointsSkipped], ["points dropped (break lines)", r.pointsDropped], ["points dropped (weld duplicates)", r.weldDuplicatesDropped],
 		["triangles proposed", r.trianglesProposed], ["triangles accepted", r.trianglesAccepted],
-		["gaps filled", r.gapsFilled], ["hole-fill triangles", r.holesFilledTriangles],
+		["folds removed", r.foldsRemoved], ["gaps filled", r.gapsFilled], ["hole-fill triangles", r.holesFilledTriangles],
 		["welded ids", r.weld.merged], ["degenerate removed", r.weld.degenerate], ["duplicates removed", r.weld.duplicates],
 		["constraint failures", r.constraintFailures], ["collapsed break line edges", r.weld.collapsedConstraints]
 	].map(function (row) { return row[0] + ": <b>" + fmt(row[1]) + "</b>"; }).join("<br>");

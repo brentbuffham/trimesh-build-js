@@ -5,7 +5,8 @@
 // The whole pipeline (spec section 6):
 //   [thin] -> prepareCloud -> insertConstraints -> reconstruct
 //   -> ingestToBMS (the weld) -> cleanSoup -> orientMesh
-//   -> validateMesh -> [closeHoles -> validateMesh]
+//   -> validateMesh -> [repairFolds] -> fillGaps
+//   -> [closeHoles -> validateMesh]
 // Only bad input throws. Everything about the result is reported.
 // buildMeshAsync runs the reconstructor on worker threads; the stages
 // before and after are the same code (prepareStages, finishStages).
@@ -24,6 +25,7 @@ import { orientMesh } from "./bms/orientMesh.js";
 import { validateMesh } from "./validate/validateMesh.js";
 import { closeHoles } from "./post/closeHoles.js";
 import { fillGaps } from "./post/fillGaps.js";
+import { repairFolds } from "./post/repairFolds.js";
 import { markWeldDuplicates } from "./input/markWeldDuplicates.js";
 import { TrimeshBuildError, ERROR_CODES } from "./errors.js";
 
@@ -37,6 +39,7 @@ export var DEFAULT_OPTIONS = Object.freeze({
 	minVotes: 2,
 	breaklineSnap: 0.001,
 	maxGapEdges: 6,
+	repairFolds: true,
 	closeHoles: false
 });
 
@@ -142,6 +145,16 @@ function finishStages(s, rec) {
 	var orient = orientMesh(bms, viewpoints);
 	var mesh = validateMesh(bms, orient.orientation);
 
+	// Twisted strips: cut them at their folds; fillGaps closes the small cuts
+	var folds = { removed: 0, kept: 0 };
+	if (opts.repairFolds && mesh.orientationConflicts > 0) {
+		folds = repairFolds(bms, { viewpoints: viewpoints });
+		if (folds.orientation) {
+			orient = folds.orientation;
+			mesh = validateMesh(bms, orient.orientation);
+		}
+	}
+
 	// Voting gaps: repair, then re-orient so the new triangles agree
 	var gaps = fillGaps(bms, mesh, opts.maxGapEdges);
 	if (gaps.filled > 0) {
@@ -194,6 +207,8 @@ function finishStages(s, rec) {
 			constraintFailures: rec.report.constraintFailures,
 			weld: { merged: weld.merged, degenerate: weld.degenerate, duplicates: weld.duplicates, collapsedConstraints: weld.collapsedConstraints },
 			orientation: { perComponent: orient.perComponent },
+			foldsRemoved: folds.removed,
+			foldsKept: folds.kept,
 			gapsFilled: gaps.filled,
 			holesFilledTriangles: filled
 		}

@@ -26,4 +26,5 @@ export { orientMesh } from "./bms/orientMesh.js";
 export { validateMesh, pointInside } from "./validate/validateMesh.js";
 export { closeHoles } from "./post/closeHoles.js";
 export { fillGaps } from "./post/fillGaps.js";
+export { repairFolds } from "./post/repairFolds.js";
 export { patchLoop, patchLoops, patchLoopIds } from "./post/patchLoop.js";

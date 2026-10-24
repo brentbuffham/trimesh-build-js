@@ -14,6 +14,10 @@ describe("Wookey Hole cave sample", function () {
 		var r = buildMesh({ count: pts.count, x: pts.x, y: pts.y, z: pts.z }, { thin: 0.05 });
 		expect(r.mesh.nonManifoldEdgeCount).toBe(0);
 		expect(r.report.trianglesAccepted).toBeGreaterThan(200000);
+		// twisted strips are cut (repairFolds): every edge runs both ways
+		expect(r.mesh.orientationConflicts).toBe(0);
+		expect(r.report.foldsRemoved).toBeGreaterThan(0);
+		expect(r.report.foldsRemoved).toBeLessThan(0.01 * r.soup.length);
 		var sizes = r.report.orientation.perComponent.map(function (c) { return c.triangles; });
 		expect(Math.max.apply(null, sizes) / r.soup.length).toBeGreaterThan(0.95);
 		// pinched holes are split: every loop is simple, so every one can be patched
@@ -28,6 +32,7 @@ describe("Wookey Hole cave sample", function () {
 		var p = patchLoops(r);
 		expect(p.patched).toBeGreaterThan(0.99 * before);
 		expect(r.mesh.nonManifoldEdgeCount).toBe(0);
+		expect(r.mesh.orientationConflicts).toBe(0);
 		expect(p.methods.fan + p.methods.centroid + p.methods.vertexFan).toBe(p.patched);
 	}, 120000);
 });

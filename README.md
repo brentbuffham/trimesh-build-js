@@ -106,7 +106,7 @@ patchLoops(result, { maxEdges: 50 });                   // every loop up to 50 e
 
 **Figure-8 loops.** A loop that passes through one vertex twice, where two holes touch at a pinch point, is split there into simple loops (ported from trimesh-boolean's `_splitSelfTouching`). Each lobe is then patched on its own.
 
-**What works on real data.** Cave loops are rarely flat, so the fan alone refuses most of them: its diagonals already exist in the mesh, or the loop can't be triangulated in projection. On the Wookey Hole sample at 5 cm thinning, `auto` closes 470 of 472 loops (49 by fan, 413 by centroid, 8 by vertex fan) with no non-manifold edges.
+**What works on real data.** Cave loops are rarely flat, so the fan alone refuses most of them: its diagonals already exist in the mesh, or the loop can't be triangulated in projection. On the Wookey Hole sample at 5 cm thinning, `auto` closes 498 of 500 loops (57 by fan, 431 by centroid, 10 by vertex fan) with no non-manifold edges and no fold edges.
 
 A loop is refused, never thrown on, when it runs along a break line, isn't simple, or when every method would give an edge a third triangle. `fillGaps` (automatic, loops of 6 edges or fewer, `auto`) and `closeHoles` (opt-in, centroid) use the same per-loop code. In the demo, tick **patch loops** and click near a red loop, then press **Patch selected** or Enter, or use **Patch all**.
 
@@ -135,6 +135,7 @@ Two blast-hole scans of about 1 million points each, thinned to 5 cm (about 16,0
 | `tolerance` | max(1 mm, 0.25 × spacing) | Weld distance. Input points closer than this are merged before meshing, and so are break line vertices. |
 | `breaklineSnap` | 0.001 | Cloud points this close to a break line are dropped (world units). |
 | `maxGapEdges` | 6 | Voting gaps up to this many edges are filled. 0 turns it off. |
+| `repairFolds` | `true` | Cut twisted strips at their folds so the mesh can be oriented (see Orientation). |
 | `closeHoles` | `false` | `{ maxLoopEdges }`: fill real holes with a centroid fan. |
 
 Only bad input throws (`TrimeshBuildError` with a `code`): wrong column lengths, a Float32 cloud with no origin, non-finite coordinates, crossing break lines, or fewer than 3 points. Problems with the result are reported, never thrown.
@@ -147,6 +148,8 @@ Normals are flipped for each connected component:
 - otherwise, a closed mesh has its void inside, so normals point inward (negative signed volume);
 - otherwise the component is left `"unresolved"`. Its winding is still consistent; only its overall direction is unknown.
 
+Winding spreads across the flattest edges first (Hoppe et al. 1992's minimum spanning tree, over triangles rather than points). That matters because a scan mesh can hold twisted, Möbius-like strips between holes, where no winding is consistent. Walking flattest-first leaves each strip's seam on its sharpest crease, the fold that makes the twist. `repairFolds` (on by default, also exported) then removes the triangles on those seams. The cuts join neighbouring holes, which the gap fill or `patchLoops` close as usual. On Wookey Hole that removes 565 triangles (0.2%) and leaves no fold edges (`mesh.orientationConflicts`), before and after patching every loop; it was about 3,600 after patching before. `report.foldsRemoved` counts them. A triangle on a break line edge is never removed; `report.foldsKept` counts the conflicts left for that reason.
+
 ## Known limits
 
 - **Close walls.** Two walls closer than about the point spacing can't be told apart locally. At the free edges of two close parallel sheets, the patch sees both edge rows as one strip, so bridging can happen there, even at 2 × spacing.
@@ -157,7 +160,7 @@ Normals are flipped for each connected component:
 
 `examples/public/samples/wookey-hole.laz` is a 381,870-point survey of Wookey Hole cave, made with an iPhone 13 Pro photogrammetry workflow. It comes from [CaveSurveys, github.com/CaveSurveys/Wookey-Hole](https://github.com/CaveSurveys/Wookey-Hole), shared with "Feel free to distribute and use!". It drives a cave test and the demo's **Wookey Hole cave** source.
 
-At `thin: 0.05` it meshes in about 9 s to about 258,000 triangles. 98% of them are in one surface, with no non-manifold edges. It has no viewpoints, so orientation is per component and can be patchy where the surface folds. The file is not part of the npm package.
+At `thin: 0.05` it meshes in about 6 s to about 260,000 triangles. 99% of them are in one surface, with no non-manifold edges and no fold edges. It has no viewpoints, so each component is consistently wound but its overall direction is `"unresolved"`. The file is not part of the npm package.
 
 ## Tests
 
