@@ -2,8 +2,6 @@
 
 ## 0.3.1 (2026-10-24)
 
-0.3.0 was tagged but never published; 0.3.1 includes everything in it.
-
 - **Orientation crosses the flattest edges first** (Hoppe et al. 1992's spanning tree, over triangles). Scan meshes can hold twisted, Möbius-like strips between holes, where no winding is consistent. Each strip's seam now lands on its fold, instead of wherever a breadth-first walk happened to meet itself. Wookey Hole: fold edges 1,773 → 461.
 - **`repairFolds(bms, { viewpoints, maxPasses })`, on by default in `buildMesh` (`repairFolds: true`).** It removes the triangles on those seams, which leaves each strip untwisted; the gap fill or `patchLoops` closes the cuts. Triangles on break line edges are never removed. New report fields `foldsRemoved` and `foldsKept`. Wookey Hole: 565 triangles removed (0.2%), 0 fold edges after the build and after patching every loop (was about 3,600).
 - **Demo:** a **repair folds** checkbox, and fold edges drawn in cyan.
