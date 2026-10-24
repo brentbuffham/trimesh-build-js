@@ -1,6 +1,6 @@
 # Roadmap
 
-trimesh-build-js is built for Kirra: caves, drives, tunnels and blast-hole voids, open or closed, with volumes when they're closed. Items are ordered by what holds that back most. Current release: **0.3.1**.
+trimesh-build-js is built for Kirra: caves, drives, tunnels and blast-hole voids, open or closed, with volumes when they're closed. Items are ordered by what holds that back most. Current release: **0.4.0**.
 
 ## v0.4: mesh quality on real scans
 
