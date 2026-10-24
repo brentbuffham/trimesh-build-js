@@ -111,7 +111,8 @@ function viewpointScore(soup, tris, viewpoints) {
  * @param {{soup: Array<Object>}} bms - triangles are flipped in place
  * @param {Array<number[]>} [viewpoints] - origin-shifted scanner positions
  * @returns {{perComponent: Array<{triangles: number, method: string, consistent: boolean}>,
- *   orientation: "viewpoint"|"closed"|"unresolved"|"mixed"}}
+ *   orientation: "viewpoint"|"closed"|"unresolved"|"mixed", componentOf: Int32Array}}
+ *   componentOf maps each soup triangle to its index in perComponent
  */
 export function orientMesh(bms, viewpoints) {
 	var soup = bms.soup;
@@ -190,5 +191,5 @@ export function orientMesh(bms, viewpoints) {
 
 	var methods = new Set(perComponent.map(function (c) { return c.method; }));
 	var orientation = methods.size === 1 ? perComponent[0].method : methods.size === 0 ? "unresolved" : "mixed";
-	return { perComponent: perComponent, orientation: orientation };
+	return { perComponent: perComponent, orientation: orientation, componentOf: comp };
 }

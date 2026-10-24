@@ -72,4 +72,17 @@ describe("orientMesh", function () {
 		expect(r.orientation).toBe("closed");
 		expect(windingConsistent(m.bms.soup)).toBe(true);
 	});
+
+	it("maps every triangle to its component", function () {
+		var a = fibonacciSphere(1500, 3, [0, 0, 0]), b = fibonacciSphere(1500, 3, [20, 0, 0]);
+		var p = new Float64Array(6 * 1500);
+		p.set(a.positions, 0); p.set(b.positions, 3 * 1500);
+		var m = meshToClean({ count: 3000, positions: p });
+		var r = orientMesh(m.bms);
+		expect(r.componentOf).toBeInstanceOf(Int32Array);
+		expect(r.componentOf.length).toBe(m.bms.soup.length);
+		var counts = [0, 0];
+		r.componentOf.forEach(function (c) { counts[c]++; });
+		expect(counts).toEqual([r.perComponent[0].triangles, r.perComponent[1].triangles]);
+	});
 });
