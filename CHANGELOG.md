@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1 (2026-10-24)
+
+- **Depends on las-laz-js ^0.10.0** (tiles and level of detail; nothing this library uses changed).
+
 ## 0.4.0 (2026-10-24)
 
 - **`patchLoop` method `"fair"` (Liepa 2003), first in `auto`.** Minimum-weight triangulation of the loop (sharpest crease, then area; never an edge the mesh already has), refined to the mesh's edge length, then the new points faired into the surface (scale-dependent umbrella, least squares, preconditioned conjugate gradients, fixed one ring of mesh around the loop). A cap cut from a sphere mesh refills to within 0.5% of the full volume (flat centroid fan: 9% short). Wookey Hole: 495 of 498 patched loops by `fair`, patching in about 1.2 s; part 3 closes completely. Also exported: `triangulateHole`, `fairFill`.
