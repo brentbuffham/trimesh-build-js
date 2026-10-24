@@ -19,7 +19,9 @@
 //        viewpoints given -> face the nearest scanner position
 //        closed           -> void is inside, normals inward
 //                            (signed volume negative)
-//        otherwise        -> leave it, "unresolved".
+//        otherwise        -> leave it, "unresolved"; buildMesh then
+//                            runs orientByVisibility (visibility.js),
+//                            a ray vote for the void side.
 //=============================================================
 
 import { computeSignedVolume } from "trimesh-boolean";

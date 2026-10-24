@@ -138,3 +138,104 @@ export function rayHits(grid, soup, ox, oy, oz, dx, dy, dz, tMin, skip) {
 		if (!sx && !sy && !sz) return false;
 	}
 }
+
+// Seeded random source (mulberry32): the same mesh gets the same vote
+function mulberry32(seed) {
+	var a = seed >>> 0;
+	return function () {
+		a = (a + 0x6D2B79F5) >>> 0;
+		var t = a;
+		t = Math.imul(t ^ (t >>> 15), t | 1);
+		t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+	};
+}
+
+function crossOf(t) {
+	var ax = t.v1.x - t.v0.x, ay = t.v1.y - t.v0.y, az = t.v1.z - t.v0.z;
+	var bx = t.v2.x - t.v0.x, by = t.v2.y - t.v0.y, bz = t.v2.z - t.v0.z;
+	return [ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx];
+}
+
+function flip(t) {
+	var x = t.v1; t.v1 = t.v2; t.v2 = x;
+}
+
+var MIN_HITS = 0.1;
+
+/**
+ * Give each "unresolved" component of an orientMesh result a sign by
+ * the ray vote: normals point to the side whose rays come back. The
+ * winding is changed in place; perComponent entries the vote decides get
+ * method "visibility", and every voted entry gets margin
+ * |H+ - H-| / (H+ + H-). A component stays "unresolved" when
+ * margin < minMargin or neither side's rays come back 10% of the time.
+ * @param {{soup: Array<Object>}} bms - oriented by orientMesh
+ * @param {ReturnType<import("./orientMesh.js").orientMesh>} orientation - its result (needs componentOf)
+ * @param {{samples?: number, rays?: number, minMargin?: number}} [options] - defaults 1000, 8, 0.2
+ * @returns {ReturnType<import("./orientMesh.js").orientMesh>} the same object, updated
+ */
+export function orientByVisibility(bms, orientation, options) {
+	var opts = options || {};
+	var samples = opts.samples > 0 ? opts.samples : 1000;
+	var rays = opts.rays > 0 ? opts.rays : 8;
+	var minMargin = typeof opts.minMargin === "number" ? opts.minMargin : 0.2;
+	var pc = orientation.perComponent, compOf = orientation.componentOf, soup = bms.soup;
+	var todo = [];
+	for (var c = 0; c < pc.length; c++) if (pc[c].method === "unresolved") todo.push(c);
+	if (todo.length === 0) return orientation;
+
+	var members = todo.map(function () { return []; }), slot = new Int32Array(pc.length).fill(-1);
+	todo.forEach(function (c, k) { slot[c] = k; });
+	for (var t = 0; t < soup.length; t++) { var s = slot[compOf[t]]; if (s >= 0) members[s].push(t); }
+
+	var mean = meanEdgeLength(soup);
+	var grid = buildTriangleGrid(soup, 2 * mean);
+	var rnd = mulberry32(12345);
+
+	todo.forEach(function (c, k) {
+		var mem = members[k], cum = new Float64Array(mem.length), total = 0;
+		for (var i = 0; i < mem.length; i++) {
+			var n = crossOf(soup[mem[i]]);
+			total += Math.hypot(n[0], n[1], n[2]);
+			cum[i] = total;
+		}
+		if (!(total > 0)) return;
+		var m = Math.min(samples, mem.length), hp = 0, hm = 0;
+		for (var j = 0; j < m; j++) {
+			// draw a triangle by area
+			var r = rnd() * total, lo = 0, hi = mem.length - 1;
+			while (lo < hi) { var mid = (lo + hi) >> 1; if (cum[mid] > r) hi = mid; else lo = mid + 1; }
+			var ti = mem[lo], tr = soup[ti], nn = crossOf(tr), len = Math.hypot(nn[0], nn[1], nn[2]);
+			var nx = nn[0] / len, ny = nn[1] / len, nz = nn[2] / len;
+			// frame e1, e2 perpendicular to n
+			var ax = Math.abs(nx) < 0.9 ? 1 : 0, ay = ax ? 0 : 1;
+			var e1x = ny * 0 - nz * ay, e1y = nz * ax - nx * 0, e1z = nx * ay - ny * ax;
+			var el = Math.hypot(e1x, e1y, e1z); e1x /= el; e1y /= el; e1z /= el;
+			var e2x = ny * e1z - nz * e1y, e2y = nz * e1x - nx * e1z, e2z = nx * e1y - ny * e1x;
+			var ox = (tr.v0.x + tr.v1.x + tr.v2.x) / 3, oy = (tr.v0.y + tr.v1.y + tr.v2.y) / 3, oz = (tr.v0.z + tr.v1.z + tr.v2.z) / 3;
+			for (var side = 1; side >= -1; side -= 2) {
+				var hits = 0;
+				for (var q = 0; q < rays; q++) {
+					// cosine-weighted direction in the hemisphere around side * n
+					var u1 = rnd(), phi = 2 * Math.PI * rnd(), rr = Math.sqrt(u1), h = side * Math.sqrt(1 - u1);
+					var dx = rr * Math.cos(phi) * e1x + rr * Math.sin(phi) * e2x + h * nx;
+					var dy = rr * Math.cos(phi) * e1y + rr * Math.sin(phi) * e2y + h * ny;
+					var dz = rr * Math.cos(phi) * e1z + rr * Math.sin(phi) * e2z + h * nz;
+					if (rayHits(grid, soup, ox, oy, oz, dx, dy, dz, mean, ti)) hits++;
+				}
+				if (side > 0) hp += hits / rays; else hm += hits / rays;
+			}
+		}
+		hp /= m; hm /= m;
+		var margin = hp + hm > 0 ? Math.abs(hp - hm) / (hp + hm) : 0;
+		pc[c].margin = Math.round(margin * 1000) / 1000;
+		if (Math.max(hp, hm) < MIN_HITS || margin < minMargin) return;
+		if (hm > hp) mem.forEach(function (ti) { flip(soup[ti]); });
+		pc[c].method = "visibility";
+	});
+
+	var methods = new Set(pc.map(function (p) { return p.method; }));
+	orientation.orientation = methods.size === 1 ? pc[0].method : methods.size === 0 ? "unresolved" : "mixed";
+	return orientation;
+}
