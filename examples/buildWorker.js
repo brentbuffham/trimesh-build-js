@@ -52,14 +52,16 @@ function renderData() {
 		}
 		return out;
 	}
-	// non-manifold edges: used by more than two triangles
-	var use = new Map();
+	// non-manifold edges: used by more than two triangles;
+	// fold edges: two triangles that run the edge the same way
+	var use = new Map(), folds = [];
 	soup.forEach(function (tr) {
 		var ids = [tr.v0.id, tr.v1.id, tr.v2.id];
 		for (var e = 0; e < 3; e++) {
 			var a = ids[e], b = ids[(e + 1) % 3], key = a < b ? a + "|" + b : b + "|" + a;
 			var r = use.get(key);
-			if (r) r.n++; else use.set(key, { n: 1, a: a, b: b });
+			if (r) { r.n++; if (r.n === 2 && r.a === a) folds.push([a, b]); }
+			else use.set(key, { n: 1, a: a, b: b });
 		}
 	});
 	var nm = [];
@@ -74,6 +76,7 @@ function renderData() {
 		loops: m.boundaryLoops.map(function (l) { return Uint32Array.from(l, function (id) { return slot.get(id); }); }),
 		constrained: segs(m.constrainedEdges.map(function (e) { return [e.a, e.b]; })),
 		nonManifold: segs(nm),
+		folds: segs(folds),
 		origin: result.origin,
 		summary: {
 			closed: m.closed,
@@ -90,7 +93,7 @@ function renderData() {
 }
 
 function transfers(d) {
-	var list = [d.positions.buffer, d.index.buffer, d.constrained.buffer, d.nonManifold.buffer];
+	var list = [d.positions.buffer, d.index.buffer, d.constrained.buffer, d.nonManifold.buffer, d.folds.buffer];
 	d.loops.forEach(function (l) { list.push(l.buffer); });
 	return list;
 }

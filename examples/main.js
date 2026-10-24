@@ -97,11 +97,12 @@ function showResult(d, keepCamera) {
 	layers.wire = new THREE.LineSegments(new THREE.WireframeGeometry(geom), new THREE.LineBasicMaterial({ color: 0x222222, transparent: true, opacity: 0.5 }));
 	group.add(layers.wire);
 
-	// Loops, break line edges, non-manifold edges
+	// Loops, break line edges, non-manifold edges, fold edges
 	var lines = new THREE.Group();
 	lines.add(lineSegments(loopSegments(d.loops, d.positions), 0xff3333));
 	lines.add(lineSegments(d.constrained, 0xffdd00));
 	lines.add(lineSegments(d.nonManifold, 0xff33ff));
+	lines.add(lineSegments(d.folds, 0x33ddff));
 	lines.renderOrder = 2;
 	layers.loops = lines;
 	group.add(lines);
@@ -202,6 +203,7 @@ function readOptions(src) {
 	if (num("denoise") > 0) o.denoise = { iterations: num("denoise") };
 	if ($("viewpoint").checked) o.viewpoints = src.viewpoints;
 	if ($("closeHoles").checked) o.closeHoles = {};
+	o.repairFolds = $("repairFolds").checked;
 	return o;
 }
 

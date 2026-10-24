@@ -88,6 +88,7 @@
 		<div class="toolbar-row">
 			<label><input type="checkbox" id="viewpoint"> viewpoint</label>
 			<label><input type="checkbox" id="closeHoles"> close holes</label>
+			<label title="Cut twisted strips at their folds (repairFolds)"><input type="checkbox" id="repairFolds" checked> repair folds</label>
 			<button id="build" class="primary">Build</button>
 			<span class="sep"></span>
 			<label><input type="checkbox" id="showMesh" checked> mesh</label>
@@ -125,6 +126,7 @@
 				<div class="legend"><span class="swatch" style="background:#ff3333"></span>boundary loop (open edge)</div>
 				<div class="legend"><span class="swatch" style="background:#ffdd00"></span>break line edge</div>
 				<div class="legend"><span class="swatch" style="background:#ff33ff"></span>non-manifold edge</div>
+				<div class="legend"><span class="swatch" style="background:#33ddff"></span>fold edge (both faces run it one way)</div>
 			</div>
 			<div>
 				<h3>Report</h3>
