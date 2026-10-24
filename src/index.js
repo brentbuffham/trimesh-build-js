@@ -23,6 +23,7 @@ export { runLocalDelaunay, proposeTriangles, acceptProposals } from "./reconstru
 export { ingestToBMS } from "./bms/ingestToBMS.js";
 export { cleanSoup } from "./bms/cleanSoup.js";
 export { orientMesh } from "./bms/orientMesh.js";
+export { orientByVisibility } from "./bms/visibility.js";
 export { validateMesh, pointInside } from "./validate/validateMesh.js";
 export { closeHoles } from "./post/closeHoles.js";
 export { fillGaps } from "./post/fillGaps.js";

@@ -29,6 +29,7 @@ import { triangulateLoop } from "trimesh-boolean";
 import { fairFill } from "./fairFill.js";
 import { edgesOf, markCurrent, poolEdgeKey } from "../bms/edges.js";
 import { orientMesh } from "../bms/orientMesh.js";
+import { orientByVisibility } from "../bms/visibility.js";
 import { validateMesh } from "../validate/validateMesh.js";
 
 // true when triangle t runs edge a -> b
@@ -296,6 +297,7 @@ function bmsOf(result) {
 
 function refresh(result, bms) {
 	var orient = orientMesh(bms, result.viewpoints || null);
+	if (result.visibility) orientByVisibility(bms, orient, result.visibility);
 	result.mesh = validateMesh(bms, orient.orientation);
 	if (result.report) result.report.orientation = { perComponent: orient.perComponent };
 }

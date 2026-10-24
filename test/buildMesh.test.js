@@ -34,7 +34,7 @@ describe("buildMesh", function () {
 		buildMesh(fibonacciSphere(3000, 5), { onProgress: function (stage, fraction) { calls.push([stage, fraction]); } });
 		var stages = [];
 		calls.forEach(function (c) { if (stages[stages.length - 1] !== c[0]) stages.push(c[0]); });
-		expect(stages).toEqual(["prepare", "reconstruct", "weld", "orient", "done"]);
+		expect(stages).toEqual(["prepare", "reconstruct", "weld", "orient", "visibility", "done"]);
 		var rec = calls.filter(function (c) { return c[0] === "reconstruct"; }).map(function (c) { return c[1]; });
 		expect(rec.length).toBeGreaterThan(5);
 		for (var i = 1; i < rec.length; i++) expect(rec[i]).toBeGreaterThanOrEqual(rec[i - 1]);
@@ -186,4 +186,33 @@ describe("buildMesh", function () {
 		expect(r.mesh.nonManifoldEdgeCount).toBe(0);
 		expect(r.mesh.boundaryLoops.length).toBeLessThan(150);
 	}, 120000);
+
+	describe("visibility", function () {
+		function keys(soup, n) { return soup.slice(0, n).map(function (t) { return t.v0.id + "," + t.v1.id + "," + t.v2.id; }); }
+
+		it("an open tunnel without viewpoints orients by visibility", function () {
+			var r = buildMesh(cylinderTunnel(2.5, 20, 0.25, 1));
+			expect(r.mesh.orientation).toBe("visibility");
+			expect(r.report.visibilityMs).toBeGreaterThanOrEqual(0);
+			expect(r.report.orientation.perComponent[0].margin).toBeGreaterThan(0.5);
+		});
+
+		it("visibility: false keeps today's result", function () {
+			var r = buildMesh(cylinderTunnel(2.5, 20, 0.25, 1), { visibility: false });
+			expect(r.mesh.orientation).toBe("unresolved");
+			expect(r.report.visibilityMs).toBe(0);
+		});
+
+		it("viewpoints decide every component and the vote changes nothing", function () {
+			var vp = { viewpoints: [[10, 0, 0]] };
+			var on = buildMesh(cylinderTunnel(2.5, 20, 0.25, 1), vp);
+			var off = buildMesh(cylinderTunnel(2.5, 20, 0.25, 1), Object.assign({ visibility: false }, vp));
+			expect(on.mesh.orientation).toBe("viewpoint");
+			expect(keys(on.soup, 200)).toEqual(keys(off.soup, 200));
+		});
+
+		it("rejects a visibility option that is not true, false or an object", function () {
+			expect(function () { buildMesh(cylinderTunnel(2.5, 20, 0.25, 1), { visibility: "yes" }); }).toThrow(TrimeshBuildError);
+		});
+	});
 });

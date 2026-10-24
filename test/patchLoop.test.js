@@ -97,3 +97,22 @@ describe("patchLoops", function () {
 		expect(windingConsistent(r.soup)).toBe(true);
 	});
 });
+
+describe("patching and the visibility sign", function () {
+	function keys(soup, n) { return soup.slice(0, n).map(function (t) { return t.v0.id + "," + t.v1.id + "," + t.v2.id; }); }
+
+	it("patching keeps the visibility sign", function () {
+		var r = buildMesh(cylinderTunnel(2.5, 20, 0.25, 1));
+		expect(r.mesh.orientation).toBe("visibility");
+		var before = keys(r.soup, 50);
+		patchLoops(r);
+		expect(keys(r.soup, 50)).toEqual(before);
+		expect(["visibility", "closed"]).toContain(r.mesh.orientation);
+	});
+
+	it("patching a visibility: false result does not vote", function () {
+		var r = buildMesh(cylinderTunnel(2.5, 20, 0.25, 1), { visibility: false });
+		patchLoop(r, 0);
+		expect(r.mesh.orientation).not.toBe("visibility");
+	});
+});

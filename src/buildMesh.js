@@ -6,7 +6,7 @@
 //   [thin] -> prepareCloud -> insertConstraints -> reconstruct
 //   -> ingestToBMS (the weld) -> cleanSoup -> orientMesh
 //   -> validateMesh -> [repairFolds] -> fillGaps
-//   -> [closeHoles -> validateMesh]
+//   -> [closeHoles -> validateMesh] -> [orientByVisibility]
 // Only bad input throws. Everything about the result is reported.
 // buildMeshAsync runs the reconstructor on worker threads; the stages
 // before and after are the same code (prepareStages, finishStages).
@@ -22,6 +22,7 @@ import { vertexCoordsOf } from "./reconstruct/vertexCoords.js";
 import { ingestToBMS } from "./bms/ingestToBMS.js";
 import { cleanSoup } from "./bms/cleanSoup.js";
 import { orientMesh } from "./bms/orientMesh.js";
+import { orientByVisibility } from "./bms/visibility.js";
 import { validateMesh } from "./validate/validateMesh.js";
 import { closeHoles } from "./post/closeHoles.js";
 import { fillGaps } from "./post/fillGaps.js";
@@ -40,6 +41,7 @@ export var DEFAULT_OPTIONS = Object.freeze({
 	breaklineSnap: 0.001,
 	maxGapEdges: 6,
 	repairFolds: true,
+	visibility: true,
 	closeHoles: false
 });
 
@@ -72,6 +74,14 @@ function tooManyPoints(input, opts) {
 	return e;
 }
 
+// visibility: true -> {}, false -> false, an options object passes through
+function visibilityOptions(v) {
+	if (v === true || v === undefined) return {};
+	if (v === false) return false;
+	if (v !== null && typeof v === "object") return v;
+	throw new TrimeshBuildError(ERROR_CODES.INVALID_INPUT, "visibility must be true, false or an options object");
+}
+
 function shiftPoint(p, o) {
 	if (!p || !isFinite(p[0]) || !isFinite(p[1]) || !isFinite(p[2])) {
 		throw new TrimeshBuildError(ERROR_CODES.INVALID_INPUT, "each viewpoint must be a finite [x, y, z]");
@@ -87,9 +97,10 @@ function prepareStages(cols, options, deferNormals) {
 	if (!reconstruct) throw new TrimeshBuildError(ERROR_CODES.INVALID_INPUT, "unknown algorithm " + String(opts.algorithm));
 
 	// onProgress(stage, fraction): stages thin, denoise, prepare, [normals,
-	// buildMeshAsync only] reconstruct, weld, orient, done. Fractions run 0..1
+	// buildMeshAsync only] reconstruct, weld, orient, visibility, done. Fractions run 0..1
 	// within a stage.
 	var report = typeof opts.onProgress === "function" ? opts.onProgress : function () {};
+	opts.visibility = visibilityOptions(opts.visibility);
 
 	var pointsInput = cols && cols.count;
 	var input = cols;
@@ -173,6 +184,16 @@ function finishStages(s, rec) {
 		mesh = validateMesh(bms, orient.orientation);
 	}
 
+	// Open components without viewpoints: a ray vote for the void side
+	var visibilityMs = 0;
+	if (opts.visibility) {
+		report("visibility", 0);
+		var t0 = performance.now();
+		orientByVisibility(bms, orient, opts.visibility);
+		visibilityMs = Math.round((performance.now() - t0) * 10) / 10;
+		mesh = validateMesh(bms, orient.orientation);
+	}
+
 	var zeroNormals = 0;
 	for (var i = 0; i < cloud.count; i++) {
 		if (cloud.normals[3 * i] === 0 && cloud.normals[3 * i + 1] === 0 && cloud.normals[3 * i + 2] === 0) zeroNormals++;
@@ -187,6 +208,7 @@ function finishStages(s, rec) {
 		constraintPoolEdges: bms.constraintPoolEdges,
 		constrainedPairs: bms.constrainedPairs,
 		viewpoints: viewpoints,
+		visibility: opts.visibility,
 		mesh: mesh,
 		unfilledLoops: unfilled,
 		report: {
@@ -210,6 +232,7 @@ function finishStages(s, rec) {
 			orientation: { perComponent: orient.perComponent },
 			foldsRemoved: folds.removed,
 			foldsKept: folds.kept,
+			visibilityMs: visibilityMs,
 			gapsFilled: gaps.filled,
 			holesFilledTriangles: filled
 		}
