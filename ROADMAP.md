@@ -1,6 +1,6 @@
 # Roadmap
 
-trimesh-build-js is built for Kirra: caves, drives, tunnels and blast-hole voids, open or closed, with volumes when they're closed. Items are ordered by what holds that back most. Current release: **0.3.0**.
+trimesh-build-js is built for Kirra: caves, drives, tunnels and blast-hole voids, open or closed, with volumes when they're closed. Items are ordered by what holds that back most. Current release: **0.3.1**.
 
 ## v0.4: mesh quality on real scans
 
@@ -34,7 +34,7 @@ trimesh-build-js is built for Kirra: caves, drives, tunnels and blast-hole voids
 
 ## Done
 
-- **Unreleased:** orientation spreads across the flattest edges first (Hoppe et al. 1992's spanning tree, over triangles), so each twisted strip's seam lands on its fold; `repairFolds` (on by default) cuts the strips there. Wookey Hole: fold edges 1,773 → 0 after the build, and about 3,600 → 0 after patching every loop.
+- **0.3.1:** orientation spreads across the flattest edges first (Hoppe et al. 1992's spanning tree, over triangles), so each twisted strip's seam lands on its fold; `repairFolds` (on by default) cuts the strips there. Wookey Hole: fold edges 1,773 → 0 after the build, and about 3,600 → 0 after patching every loop.
 - **0.3.0:** speed. Integer edge keys and one shared edge table, a typed vote table, `buildMeshAsync` (normals and patches on worker threads), `maxPoints` with a suggested thin, `onProgress`. 1M points: 55 s → about 14.5 s, 3.8 GB → about 1.1 GB.
 - **0.2.0:** loop patching (`patchLoop`, `patchLoops`, `auto`), figure-8 splitting, the Wookey Hole sample, the demo on GitHub Pages.
 - **0.1.0:** `buildMesh` (umbrella voting, BMS output), break lines, thin and denoise, voting-gap fill, orientation, validation, `closeHoles`, `toIndexed`.
