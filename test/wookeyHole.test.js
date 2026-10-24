@@ -11,7 +11,7 @@ var SAMPLE = sample("wookey-hole.laz");
 
 async function load(file) {
 	var las = await openLas(file);
-	return las.readPoints({ fields: ["x", "y", "z"] });
+	try { return await las.readPoints({ fields: ["x", "y", "z"] }); } finally { await las.close(); }
 }
 
 describe("Wookey Hole cave sample", function () {
