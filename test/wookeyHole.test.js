@@ -2,7 +2,21 @@
 import { describe, it, expect } from "vitest";
 import { fileURLToPath } from "node:url";
 import { openLas } from "las-laz-js";
-import { buildMesh, patchLoops } from "../src/index.js";
+import { buildMesh, patchLoops, orientMesh } from "../src/index.js";
+
+// the method of the component with the most triangles
+function largestMethod(r) {
+	var pc = r.report.orientation.perComponent, best = pc[0];
+	pc.forEach(function (c) { if (c.triangles > best.triangles) best = c; });
+	return best.method;
+}
+
+// triangle -> "a,b,c" with the smallest id first, winding kept
+function rotKey(a, b, c) {
+	if (a < b && a < c) return a + "," + b + "," + c;
+	if (b < c) return b + "," + c + "," + a;
+	return c + "," + a + "," + b;
+}
 
 function sample(name) {
 	return fileURLToPath(new URL("../examples/public/samples/" + name, import.meta.url));
@@ -27,6 +41,9 @@ describe("Wookey Hole cave sample", function () {
 		expect(r.report.foldsRemoved).toBeLessThan(0.01 * r.soup.length);
 		var sizes = r.report.orientation.perComponent.map(function (c) { return c.triangles; });
 		expect(Math.max.apply(null, sizes) / r.soup.length).toBeGreaterThan(0.95);
+		// no viewpoints: the ray vote gives the cave its sign
+		expect(largestMethod(r)).toBe("visibility");
+		console.log("visibility ms", r.report.visibilityMs);
 		// pinched holes are split: every loop is simple, so every one can be patched
 		r.mesh.boundaryLoops.forEach(function (l) { expect(new Set(l).size).toBe(l.length); });
 	}, 120000);
@@ -54,6 +71,7 @@ describe("Wookey Hole cave sample", function () {
 			expect(r.mesh.orientationConflicts).toBe(0);
 			var sizes = r.report.orientation.perComponent.map(function (c) { return c.triangles; });
 			expect(Math.max.apply(null, sizes) / r.soup.length).toBeGreaterThan(0.9);
+			expect(largestMethod(r)).toBe("visibility");
 			var before = r.mesh.boundaryLoops.length;
 			var p = patchLoops(r);
 			expect(p.patched).toBeGreaterThan(0.98 * before);
@@ -61,4 +79,25 @@ describe("Wookey Hole cave sample", function () {
 			expect(r.mesh.orientationConflicts).toBe(0);
 		}, 180000);
 	});
+
+	// Only the cave itself: an isolated sheet closes into a thin pancake
+	// (6,813 triangles here, -0.27 m3), whose volume sign says nothing
+	it("part 3: the vote's sign agrees with the closed cave's", async function () {
+		var pts = await load(sample("wookey-hole-3.laz"));
+		var r = buildMesh({ count: pts.count, x: pts.x, y: pts.y, z: pts.z }, { thin: 0.05 });
+		var o = orientMesh(r, null), big = 0;
+		o.perComponent.forEach(function (c, i) { if (c.triangles > o.perComponent[big].triangles) big = i; });
+		var before = r.soup.filter(function (t, i) { return o.componentOf[i] === big; }).map(function (t) { return rotKey(t.v0.id, t.v1.id, t.v2.id); });
+		patchLoops(r);
+		expect(r.mesh.closed).toBe(true);
+		var after = new Set(r.soup.map(function (t) { return rotKey(t.v0.id, t.v1.id, t.v2.id); }));
+		var same = 0, reversed = 0;
+		before.forEach(function (k) {
+			var ids = k.split(",");
+			if (after.has(k)) same++;
+			else if (after.has(rotKey(+ids[0], +ids[2], +ids[1]))) reversed++;
+		});
+		console.log("part 3 winding kept", same, "reversed", reversed, "of", before.length);
+		expect(same / (same + reversed)).toBeGreaterThan(0.99);
+	}, 180000);
 });
