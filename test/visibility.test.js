@@ -30,10 +30,17 @@ describe("triangle grid and rays", function () {
 		expect(rayHits(g, soup, 0.1, 0.1, -4.95, 0, 0, 1, 0.5, -1)).toBe(true);
 	});
 
-	it("caps the cell count", function () {
-		var big = [tri(0, 500), tri(1000, 500)];
+	it("stops a ray at tMax", function () {
+		var g = buildTriangleGrid(soup, 2 * meanEdgeLength(soup));
+		expect(rayHits(g, soup, 0.1, 0.1, 0, 0, 0, 1, 0, -1, 4)).toBe(false);
+		expect(rayHits(g, soup, 0.1, 0.1, 0, 0, 0, 1, 0, -1, 6)).toBe(true);
+	});
+
+	it("keeps its cell size however far apart the triangles are", function () {
+		var big = [tri(0, 0.5), tri(3000, 0.5)];
 		var g = buildTriangleGrid(big, 0.01);
-		expect(g.n[0] * g.n[1] * g.n[2]).toBeLessThanOrEqual(Math.pow(2, 21) * 1.01);
+		expect(g.cell).toBe(0.01);
+		expect(rayHits(g, big, 0.1, 0.1, 1, 0, 0, 1, 0, -1, 5000)).toBe(true);
 	});
 });
 
@@ -121,5 +128,61 @@ describe("orientByVisibility", function () {
 		var r = orientByVisibility(m.bms, orientMesh(m.bms), {});
 		r.perComponent.forEach(function (c) { if (c.margin !== undefined) expect(Number.isFinite(c.margin)).toBe(true); });
 		expect(r.perComponent[0].method).toBe("visibility");
+	});
+
+	// A ring tube of N x rings quads, no pool (ids unique), one component
+	function ringTube(L) {
+		var N = 64, step = 0.25, rings = Math.round(L / step), V = [], soup = [];
+		for (var i = 0; i <= rings; i++) for (var j = 0; j < N; j++) {
+			var a = 2 * Math.PI * j / N;
+			V.push({ x: i * step, y: 2.5 * Math.cos(a), z: 2.5 * Math.sin(a), id: i * N + j });
+		}
+		for (var p = 0; p < rings; p++) for (var q = 0; q < N; q++) {
+			var A = V[p * N + q], B = V[p * N + (q + 1) % N], C = V[(p + 1) * N + q], D = V[(p + 1) * N + (q + 1) % N];
+			soup.push({ v0: A, v1: B, v2: D }, { v0: A, v1: D, v2: C });
+		}
+		return soup;
+	}
+
+	it("a stray triangle 3 km away does not slow the vote or change it", function () {
+		var soup = ringTube(200), n = soup.length;
+		soup.push({ v0: { x: 3000, y: 3000, z: 3000, id: 1e6 }, v1: { x: 3000.2, y: 3000, z: 3000, id: 1e6 + 1 }, v2: { x: 3000, y: 3000.2, z: 3000, id: 1e6 + 2 } });
+		var comp = new Int32Array(n + 1); comp[n] = 1;
+		var o = { perComponent: [{ triangles: n, method: "unresolved" }, { triangles: 1, method: "unresolved" }], orientation: "unresolved", componentOf: comp };
+		var t0 = performance.now();
+		orientByVisibility({ soup: soup }, o, {});
+		var ms = performance.now() - t0;
+		expect(o.perComponent[0].method).toBe("visibility");
+		expect(o.perComponent[1].method).toBe("unresolved");
+		expect(ms).toBeLessThan(1500);
+	}, 60000);
+
+	it("finds the opposite wall in another component (square tunnel of 4 separate walls)", function () {
+		// walls y = 0, y = 4, z = 0, z = 4, each its own grid of 0.25 m squares along x 0..20
+		var soup = [], comp = [], id = 0, s = 0.25, nx = 80, nw = 16;
+		function wall(w, at) {
+			var V = [];
+			for (var i = 0; i <= nx; i++) for (var j = 0; j <= nw; j++) {
+				var u = j * s, p = w < 2 ? { x: i * s, y: at, z: u } : { x: i * s, y: u, z: at };
+				p.id = id++; V.push(p);
+			}
+			for (var a = 0; a < nx; a++) for (var b = 0; b < nw; b++) {
+				var A = V[a * (nw + 1) + b], B = V[a * (nw + 1) + b + 1], C = V[(a + 1) * (nw + 1) + b], D = V[(a + 1) * (nw + 1) + b + 1];
+				// walls 1 and 3 wound the other way
+				if (w % 2) soup.push({ v0: A, v1: D, v2: B }, { v0: A, v1: C, v2: D });
+				else soup.push({ v0: A, v1: B, v2: D }, { v0: A, v1: D, v2: C });
+				comp.push(w, w);
+			}
+		}
+		wall(0, 0); wall(1, 4); wall(2, 0); wall(3, 4);
+		var o = { perComponent: [0, 1, 2, 3].map(function (w) { return { triangles: 2 * nx * nw, method: "unresolved" }; }), orientation: "unresolved", componentOf: Int32Array.from(comp) };
+		orientByVisibility({ soup: soup }, o, {});
+		expect(o.orientation).toBe("visibility");
+		var inward = 0;
+		soup.forEach(function (t) {
+			var n = triNormal(t), c = [(t.v0.y + t.v1.y + t.v2.y) / 3, (t.v0.z + t.v1.z + t.v2.z) / 3];
+			if (n[1] * (2 - c[0]) + n[2] * (2 - c[1]) > 0) inward++;
+		});
+		expect(inward / soup.length).toBeGreaterThan(0.99);
 	});
 });

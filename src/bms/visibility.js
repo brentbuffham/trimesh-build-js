@@ -11,12 +11,16 @@
 // orientation). Rays test every triangle, not only the component's:
 // holes often split a cave into separate wall pieces.
 //
-//   grid:  uniform cells over the triangles' boxes (CSR, typed)
+//   grid:  sparse uniform cells over the triangles' boxes (a Map
+//          from cell key to a CSR slot), so a stray far triangle
+//          costs one cell instead of coarsening every cell
 //   rays:  3D DDA through the cells (Amanatides & Woo 1987),
-//          Moller-Trumbore per triangle, any hit past tMin counts
+//          Moller-Trumbore per triangle, any hit in (tMin, tMax]
+//          counts; tMax is twice the component's own size
 //=============================================================
 
-var MAX_CELLS = 2097152; // 2^21
+// Cell keys ix + nx (iy + ny iz) stay exact below 2^52
+var MAX_KEY = 4503599627370496;
 
 /**
  * Mean length over every triangle's three edges.
@@ -33,12 +37,12 @@ export function meanEdgeLength(soup) {
 }
 
 /**
- * Uniform grid over the triangles' bounding boxes. A triangle is listed
- * in every cell its box overlaps; the cells grow until there are at
- * most 2^21 of them.
+ * Sparse uniform grid over the triangles' bounding boxes. A triangle is
+ * listed in every cell its box overlaps; only cells that hold a triangle
+ * are stored, so the cell size stays as asked whatever the extent.
  * @param {Array<{v0, v1, v2}>} soup
  * @param {number} cellSize
- * @returns {Object} grid: min, cell, n, start (CSR offsets), tris, P (9 coords per triangle), stamp, ray
+ * @returns {Object} grid: min, cell, n (cells per axis over the box), slot (Map key -> cell), start (CSR offsets), tris, P (9 coords per triangle), stamp, ray
  */
 export function buildTriangleGrid(soup, cellSize) {
 	var T = soup.length, P = new Float64Array(9 * T);
@@ -60,14 +64,12 @@ export function buildTriangleGrid(soup, cellSize) {
 	var cell = cellSize > 0 ? cellSize : 1, n;
 	for (;;) {
 		n = [0, 1, 2].map(function (a) { return Math.max(1, Math.ceil((hi[a] - lo[a]) / cell)); });
-		var cells = n[0] * n[1] * n[2];
-		if (cells <= MAX_CELLS) break;
-		cell *= Math.cbrt(cells / MAX_CELLS) * 1.0001;
+		if (n[0] * n[1] * n[2] <= MAX_KEY) break;
+		cell *= Math.cbrt(n[0] * n[1] * n[2] / MAX_KEY) * 1.0001;
 	}
 
-	var nx = n[0], ny = n[1], nz = n[2];
-	var start = new Int32Array(nx * ny * nz + 1);
-	var box = new Int32Array(6 * T);
+	// each triangle's cell box, then a count per occupied cell
+	var nx = n[0], ny = n[1], box = new Int32Array(6 * T), slot = new Map(), counts = [];
 	for (var t = 0; t < T; t++) {
 		for (var a = 0; a < 3; a++) {
 			var mn = Math.min(P[9 * t + a], P[9 * t + 3 + a], P[9 * t + 6 + a]);
@@ -77,16 +79,21 @@ export function buildTriangleGrid(soup, cellSize) {
 		}
 		for (var cz = box[6 * t + 2]; cz <= box[6 * t + 5]; cz++)
 			for (var cy = box[6 * t + 1]; cy <= box[6 * t + 4]; cy++)
-				for (var cx = box[6 * t]; cx <= box[6 * t + 3]; cx++) start[(cz * ny + cy) * nx + cx + 1]++;
+				for (var cx = box[6 * t]; cx <= box[6 * t + 3]; cx++) {
+					var key = cx + nx * (cy + ny * cz), sl = slot.get(key);
+					if (sl === undefined) { sl = counts.length; slot.set(key, sl); counts.push(0); }
+					counts[sl]++;
+				}
 	}
-	for (var c = 0; c < nx * ny * nz; c++) start[c + 1] += start[c];
-	var tris = new Int32Array(start[nx * ny * nz]), fill = start.slice(0, nx * ny * nz);
+	var C = counts.length, start = new Int32Array(C + 1);
+	for (var c = 0; c < C; c++) start[c + 1] = start[c] + counts[c];
+	var tris = new Int32Array(start[C]), fill = start.slice(0, C);
 	for (var u = 0; u < T; u++) {
 		for (var zz = box[6 * u + 2]; zz <= box[6 * u + 5]; zz++)
 			for (var yy = box[6 * u + 1]; yy <= box[6 * u + 4]; yy++)
-				for (var xx = box[6 * u]; xx <= box[6 * u + 3]; xx++) tris[fill[(zz * ny + yy) * nx + xx]++] = u;
+				for (var xx = box[6 * u]; xx <= box[6 * u + 3]; xx++) tris[fill[slot.get(xx + nx * (yy + ny * zz))]++] = u;
 	}
-	return { min: lo, cell: cell, n: n, start: start, tris: tris, P: P, stamp: new Int32Array(T), ray: 0 };
+	return { min: lo, cell: cell, n: n, slot: slot, start: start, tris: tris, P: P, stamp: new Int32Array(T), ray: 0 };
 }
 
 // Moller-Trumbore: ray parameter t of the hit on triangle i, or -1
@@ -109,33 +116,39 @@ function hitT(P, i, ox, oy, oz, dx, dy, dz) {
 }
 
 /**
- * Does the ray o + t d hit any triangle other than skip at t > tMin?
- * Pass a unit d so that tMin is a distance.
+ * Does the ray o + t d hit any triangle other than skip at tMin < t <= tMax?
+ * Pass a unit d so that tMin and tMax are distances; tMax defaults to
+ * the edge of the grid.
  * @returns {boolean}
  */
-export function rayHits(grid, soup, ox, oy, oz, dx, dy, dz, tMin, skip) {
+export function rayHits(grid, soup, ox, oy, oz, dx, dy, dz, tMin, skip, tMax) {
+	var tEnd = tMax > 0 ? tMax : Infinity;
 	var lo = grid.min, cell = grid.cell, n = grid.n, nx = n[0], ny = n[1], nz = n[2];
 	var ix = Math.floor((ox - lo[0]) / cell), iy = Math.floor((oy - lo[1]) / cell), iz = Math.floor((oz - lo[2]) / cell);
 	if (ix < 0 || iy < 0 || iz < 0 || ix >= nx || iy >= ny || iz >= nz) return false;
-	var ray = ++grid.ray, stamp = grid.stamp, start = grid.start, tris = grid.tris, P = grid.P;
+	var ray = ++grid.ray, stamp = grid.stamp, slot = grid.slot, start = grid.start, tris = grid.tris, P = grid.P;
 	var sx = dx > 0 ? 1 : dx < 0 ? -1 : 0, sy = dy > 0 ? 1 : dy < 0 ? -1 : 0, sz = dz > 0 ? 1 : dz < 0 ? -1 : 0;
+	if (!sx && !sy && !sz) return false;
 	var tmx = sx ? (lo[0] + (ix + (sx > 0 ? 1 : 0)) * cell - ox) / dx : Infinity;
 	var tmy = sy ? (lo[1] + (iy + (sy > 0 ? 1 : 0)) * cell - oy) / dy : Infinity;
 	var tmz = sz ? (lo[2] + (iz + (sz > 0 ? 1 : 0)) * cell - oz) / dz : Infinity;
 	var tdx = sx ? cell / Math.abs(dx) : Infinity, tdy = sy ? cell / Math.abs(dy) : Infinity, tdz = sz ? cell / Math.abs(dz) : Infinity;
 	for (;;) {
-		var c = (iz * ny + iy) * nx + ix;
-		for (var k = start[c]; k < start[c + 1]; k++) {
-			var t = tris[k];
-			if (stamp[t] === ray) continue;
-			stamp[t] = ray;
-			if (t === skip) continue;
-			if (hitT(P, t, ox, oy, oz, dx, dy, dz) > tMin) return true;
+		var c = slot.get(ix + nx * (iy + ny * iz));
+		if (c !== undefined) {
+			for (var k = start[c]; k < start[c + 1]; k++) {
+				var t = tris[k];
+				if (stamp[t] === ray) continue;
+				stamp[t] = ray;
+				if (t === skip) continue;
+				var th = hitT(P, t, ox, oy, oz, dx, dy, dz);
+				if (th > tMin && th <= tEnd) return true;
+			}
 		}
-		if (tmx <= tmy && tmx <= tmz) { ix += sx; tmx += tdx; if (ix < 0 || ix >= nx) return false; }
-		else if (tmy <= tmz) { iy += sy; tmy += tdy; if (iy < 0 || iy >= ny) return false; }
-		else { iz += sz; tmz += tdz; if (iz < 0 || iz >= nz) return false; }
-		if (!sx && !sy && !sz) return false;
+		// step into the next cell; stop once it starts past tEnd
+		if (tmx <= tmy && tmx <= tmz) { if (tmx > tEnd) return false; ix += sx; tmx += tdx; if (ix < 0 || ix >= nx) return false; }
+		else if (tmy <= tmz) { if (tmy > tEnd) return false; iy += sy; tmy += tdy; if (iy < 0 || iy >= ny) return false; }
+		else { if (tmz > tEnd) return false; iz += sz; tmz += tdz; if (iz < 0 || iz >= nz) return false; }
 	}
 }
 
@@ -201,6 +214,19 @@ export function orientByVisibility(bms, orientation, options) {
 			cum[i] = total;
 		}
 		if (!(total > 0)) return;
+		// rays reach twice the component's own size: its opposite wall is
+		// within that, and a far stray triangle is not walked to
+		var bx0 = Infinity, by0 = Infinity, bz0 = Infinity, bx1 = -Infinity, by1 = -Infinity, bz1 = -Infinity;
+		for (var b = 0; b < mem.length; b++) {
+			var w = soup[mem[b]], vv = [w.v0, w.v1, w.v2];
+			for (var e = 0; e < 3; e++) {
+				var p = vv[e];
+				if (p.x < bx0) bx0 = p.x; if (p.x > bx1) bx1 = p.x;
+				if (p.y < by0) by0 = p.y; if (p.y > by1) by1 = p.y;
+				if (p.z < bz0) bz0 = p.z; if (p.z > bz1) bz1 = p.z;
+			}
+		}
+		var reach = Math.max(2 * Math.hypot(bx1 - bx0, by1 - by0, bz1 - bz0), 4 * mean);
 		var m = Math.min(samples, mem.length), hp = 0, hm = 0;
 		for (var j = 0; j < m; j++) {
 			// draw a triangle by area
@@ -222,7 +248,7 @@ export function orientByVisibility(bms, orientation, options) {
 					var dx = rr * Math.cos(phi) * e1x + rr * Math.sin(phi) * e2x + h * nx;
 					var dy = rr * Math.cos(phi) * e1y + rr * Math.sin(phi) * e2y + h * ny;
 					var dz = rr * Math.cos(phi) * e1z + rr * Math.sin(phi) * e2z + h * nz;
-					if (rayHits(grid, soup, ox, oy, oz, dx, dy, dz, mean, ti)) hits++;
+					if (rayHits(grid, soup, ox, oy, oz, dx, dy, dz, mean, ti, reach)) hits++;
 				}
 				if (side > 0) hp += hits / rays; else hm += hits / rays;
 			}
