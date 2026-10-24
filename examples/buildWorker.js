@@ -69,6 +69,10 @@ function renderData() {
 
 	var m = result.mesh, rep = Object.assign({}, result.report);
 	rep.components = rep.orientation ? rep.orientation.perComponent.length : 0;
+	// the ray vote's margin on the largest component, when it decided it
+	var pc = rep.orientation ? rep.orientation.perComponent : [], big = pc[0];
+	pc.forEach(function (c) { if (c.triangles > big.triangles) big = c; });
+	rep.voteMargin = big && big.method === "visibility" ? big.margin : null;
 	delete rep.orientation;
 	return {
 		positions: Float32Array.from(pos),

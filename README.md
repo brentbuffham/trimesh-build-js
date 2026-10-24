@@ -139,6 +139,7 @@ Two blast-hole scans of about 1 million points each, thinned to 5 cm (about 16,0
 | `breaklineSnap` | 0.001 | Cloud points this close to a break line are dropped (world units). |
 | `maxGapEdges` | 6 | Voting gaps up to this many edges are filled. 0 turns it off. |
 | `repairFolds` | `true` | Cut twisted strips at their folds so the mesh can be oriented (see Orientation). |
+| `visibility` | `true` | Ray vote for the void side of open components without viewpoints (see Orientation); `false`, or `{ samples, rays, minMargin }` (defaults 1000, 8, 0.2). |
 | `closeHoles` | `false` | `{ maxLoopEdges }`: fill real holes with a centroid fan. |
 
 Only bad input throws (`TrimeshBuildError` with a `code`): wrong column lengths, a Float32 cloud with no origin, non-finite coordinates, crossing break lines, or fewer than 3 points. Problems with the result are reported, never thrown.
@@ -149,13 +150,17 @@ Normals are flipped for each connected component:
 
 - with `viewpoints`, normals face the nearest scanner position;
 - otherwise, a closed mesh has its void inside, so normals point inward (negative signed volume);
-- otherwise the component is left `"unresolved"`. Its winding is still consistent; only its overall direction is unknown.
+- otherwise, an open component gets a ray vote (`"visibility"`). Rays are cast into both sides from about 1,000 triangles, sampled by area. Inside a cave, drive or hole, the rays cast into the void come back off the opposite wall, while those cast into the rock escape, so normals point at the side whose rays come back (after Takayama, Jacobson & Sorkine 2014). The rays can hit every triangle, because holes often split a cave into separate wall pieces. `perComponent[i].margin` is \|H+ − H−\| / (H+ + H−) over the two sides' hit rates;
+- a component with a weak vote (margin under 0.2, or fewer than 10% of rays coming back on either side, as on flat terrain) is left `"unresolved"`. Its winding is still consistent; only its overall direction is unknown.
+
+The vote runs once at the end of `buildMesh` (`report.visibilityMs`), and again after `patchLoop` or `patchLoops`. On Wookey Hole it takes about 0.24 s. On part 3, which `patchLoops` closes completely, the sign the vote chose for the cave matches the closed mesh's signed volume on all 154,341 triangles.
 
 Winding spreads across the flattest edges first (Hoppe et al. 1992's minimum spanning tree, over triangles rather than points). That matters because a scan mesh can hold twisted, Möbius-like strips between holes, where no winding is consistent. Walking flattest-first leaves each strip's seam on its sharpest crease, the fold that makes the twist. `repairFolds` (on by default, also exported) then removes the triangles on those seams. The cuts join neighbouring holes, which the gap fill or `patchLoops` close as usual. On Wookey Hole that removes 565 triangles (0.2%) and leaves no fold edges (`mesh.orientationConflicts`), before and after patching every loop; it was about 3,600 after patching before. `report.foldsRemoved` counts them. A triangle on a break line edge is never removed; `report.foldsKept` counts the conflicts left for that reason.
 
 ## Known limits
 
 - **Close walls.** Two walls closer than about the point spacing can't be told apart locally. At the free edges of two close parallel sheets, the patch sees both edge rows as one strip, so bridging can happen there, even at 2 × spacing.
+- **Thin closed bubbles.** Patching the rim of an isolated sheet can close it into a thin pancake. The closed rule then sets its sign from a volume near zero, which may undo the ray vote. On Wookey part 3, one 6,813-triangle sheet comes out at −0.27 m³ and flips after `patchLoops`.
 - **Break line junctions.** Break lines may meet at a shared vertex (vertices closer than the weld tolerance are merged). A break line ending on another line's interior (a T-junction) is rejected like a crossing; add a vertex to the other line at that point.
 - **Deferred:** ball pivoting and screened Poisson (as extra algorithms), decimation, smoothing, tiling of very large clouds, adaptive k.
 
@@ -163,7 +168,7 @@ Winding spreads across the flattest edges first (Hoppe et al. 1992's minimum spa
 
 `examples/public/samples/wookey-hole.laz` is a 381,870-point survey of Wookey Hole cave, made with an iPhone 13 Pro photogrammetry workflow. It comes from [CaveSurveys, github.com/CaveSurveys/Wookey-Hole](https://github.com/CaveSurveys/Wookey-Hole), shared with "Feel free to distribute and use!". It drives a cave test and the demo's **Wookey Hole cave** source. `wookey-hole-2.laz` (638,466 points) and `wookey-hole-3.laz` (194,016 points) are the survey's other two parts, in the same coordinate frame, taken from the vertices of its OBJ meshes; see `examples/public/samples/README.md`.
 
-At `thin: 0.05` it meshes in about 6 s to about 260,000 triangles. 99% of them are in one surface, with no non-manifold edges and no fold edges. It has no viewpoints, so each component is consistently wound but its overall direction is `"unresolved"`. The file is not part of the npm package.
+At `thin: 0.05` it meshes in about 6 s to about 260,000 triangles. 99% of them are in one surface, with no non-manifold edges and no fold edges. It has no viewpoints, so its sign comes from the ray vote: the cave orients as `"visibility"`. The file is not part of the npm package.
 
 ## Tests
 

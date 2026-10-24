@@ -174,7 +174,7 @@ function showReport(d, ms) {
 		"boundary edges: <b>" + fmt(m.boundaryEdgeCount) + "</b><br>" +
 		"non-manifold edges: <span class='" + (m.nonManifoldEdgeCount ? "bad" : "good") + "'>" + m.nonManifoldEdgeCount + "</span><br>" +
 		"break line edges: <b>" + m.constrainedEdges + "</b> / " + r.breaklineSegments + "<br>" +
-		"orientation: <b>" + m.orientation + "</b>" + (m.orientationConflicts ? " (<span class='bad'>" + m.orientationConflicts + " fold edges</span>)" : "") + "<br>" +
+		"orientation: <b>" + m.orientation + "</b>" + (r.voteMargin !== null && r.voteMargin !== undefined ? " (margin " + r.voteMargin + ")" : "") + (m.orientationConflicts ? " (<span class='bad'>" + m.orientationConflicts + " fold edges</span>)" : "") + "<br>" +
 		"components: <b>" + r.components + "</b>" +
 		(ms !== undefined ? "<br>time: <b>" + fmt(ms) + " ms</b>" : "");
 	$("report").innerHTML = [
@@ -204,6 +204,7 @@ function readOptions(src) {
 	if ($("viewpoint").checked) o.viewpoints = src.viewpoints;
 	if ($("closeHoles").checked) o.closeHoles = {};
 	o.repairFolds = $("repairFolds").checked;
+	o.visibility = $("visibility").checked;
 	return o;
 }
 
@@ -214,7 +215,7 @@ var worker = null;
 var busy = false;
 var buildStart = 0;
 
-var STAGES = { thin: "Thinning", denoise: "Denoising", prepare: "Normals", reconstruct: "Triangulating", weld: "Welding", orient: "Orienting", done: "Drawing" };
+var STAGES = { thin: "Thinning", denoise: "Denoising", prepare: "Normals", reconstruct: "Triangulating", weld: "Welding", orient: "Orienting", visibility: "Finding the void side", done: "Drawing" };
 
 function overlay(on, text) {
 	$("processing-overlay").classList.toggle("active", on);

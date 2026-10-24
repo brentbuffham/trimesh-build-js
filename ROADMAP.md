@@ -8,7 +8,7 @@ trimesh-build-js is built for Kirra: caves, drives, tunnels and blast-hole voids
    - Split the mesh triangles on long loop edges before filling. Where the mesh reaches into a hole with long, thin triangles, loop edges are several spacings long, and the patch's first row stays that coarse. On a sphere cap with such a rim, `fair` is 5.8% short against 0.4% on a clean rim.
    - The 1,144-edge loop on Wookey part 3 still falls back to the centroid fan: its faired patch comes within the weld tolerance of the mesh. Test patch triangles against nearby mesh triangles instead of point distance alone.
    - Fix trimesh-boolean `triangulateLoop` returning two triangles on one loop edge (patchLoop refuses those patches now).
-2. **Cave orientation without scanner positions.** Use photogrammetry camera positions when the scan carries them. Otherwise, take the passage centre line as viewpoints (it lies inside the void by definition), so a cave orients as `"viewpoint"` rather than `"unresolved"`.
+2. **Thin closed bubbles.** After `patchLoops`, an isolated sheet can close into a pancake whose near-zero volume sets its sign (Wookey part 3: 6,813 triangles, −0.27 m³), undoing the ray vote. Treat a closed component whose volume is small against its area × edge length as open, and vote it.
 3. **Folds that don't twist.** `repairFolds` finds folds through the orientation conflicts they cause. A Z-fold (the surface doubling back on itself and on again) orients cleanly, so it isn't found. Detect it by a sharp crease between triangles wound the same way, or by face normals that disagree with the point normals, then cut and patch it the same way.
 
 ## v0.5: scale and Kirra
@@ -37,6 +37,7 @@ trimesh-build-js is built for Kirra: caves, drives, tunnels and blast-hole voids
 
 ## Done
 
+- **Unreleased:** cave orientation without scanner positions. A ray vote (`"visibility"`, after Takayama et al. 2014) points normals at the side whose rays come back off the opposite wall. Wookey Hole orients as `"visibility"` in about 0.24 s, and matches the closed part 3's signed volume on the whole cave.
 - **0.3.1:** orientation spreads across the flattest edges first (Hoppe et al. 1992's spanning tree, over triangles), so each twisted strip's seam lands on its fold; `repairFolds` (on by default) cuts the strips there. Wookey Hole: fold edges 1,773 → 0 after the build, and about 3,600 → 0 after patching every loop.
 - **0.3.0:** speed. Integer edge keys and one shared edge table, a typed vote table, `buildMeshAsync` (normals and patches on worker threads), `maxPoints` with a suggested thin, `onProgress`. 1M points: 55 s → about 14.5 s, 3.8 GB → about 1.1 GB.
 - **0.2.0:** loop patching (`patchLoop`, `patchLoops`, `auto`), figure-8 splitting, the Wookey Hole sample, the demo on GitHub Pages.
