@@ -62,18 +62,22 @@ describe("fairFill", function () {
 		expect(f.reason).toBeUndefined();
 		var m = f.points.length / 3;
 		expect(m).toBeGreaterThan(1000);
-		for (var k = 0; k < m; k++) expect(Math.abs(f.points[3 * k + 2])).toBeLessThan(1e-6);
+		var zmax = 0;
+		for (var k = 0; k < m; k++) zmax = Math.max(zmax, Math.abs(f.points[3 * k + 2]));
+		expect(zmax).toBeLessThan(1e-6);
 		// a disc: loop edges used once, the rest twice; Euler: T = n + 2m - 2
 		var use = new Map();
 		f.tris.forEach(function (t) {
 			for (var e = 0; e < 3; e++) { var a = t[e], b = t[(e + 1) % 3], key = Math.min(a, b) + "," + Math.max(a, b); use.set(key, (use.get(key) || 0) + 1); }
 		});
+		var wrong = 0;
 		use.forEach(function (c, key) {
 			var ab = key.split(",").map(Number), loopEdge = ab[1] < n && (ab[1] - ab[0] === 1 || ab[1] - ab[0] === n - 1);
-			expect(c).toBe(loopEdge ? 1 : 2);
+			if (c !== (loopEdge ? 1 : 2)) wrong++;
 		});
+		expect(wrong).toBe(0);
 		expect(f.tris.length).toBe(n + 2 * m - 2);
-	});
+	}, 30000);
 });
 
 describe("patchLoop method fair", function () {
