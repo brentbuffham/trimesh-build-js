@@ -110,10 +110,29 @@ export function patchLoopIds(bms, edges, loop, method) {
 		return { reason: "every vertex fan would give an edge a third face" };
 	}
 
+	// A patch must be a disc on the loop: every loop edge used once, every
+	// edge of its own used twice. (triangulateLoop can overlap two triangles
+	// on one loop edge, which made that edge non-manifold.)
+	function isDisc(tl) {
+		var use = new Map();
+		for (var t = 0; t < tl.length; t++) {
+			var ids = [tl[t].v0.id, tl[t].v1.id, tl[t].v2.id];
+			for (var d = 0; d < 3; d++) {
+				var k = poolEdgeKey(ids[d], ids[(d + 1) % 3]);
+				use.set(k, (use.get(k) || 0) + 1);
+			}
+		}
+		var ok = true;
+		onLoop.forEach(function (k) { if (use.get(k) !== 1) ok = false; });
+		use.forEach(function (c, k) { if (!onLoop.has(k) && c !== 2) ok = false; });
+		return ok;
+	}
+
 	var order = method === "auto" ? ["fan", "centroid", "vertexFan"] : [method];
 	var made = null, used = null, reasons = [];
 	for (var o = 0; o < order.length && !made; o++) {
 		var r = order[o] === "centroid" ? centroidTris() : order[o] === "vertexFan" ? vertexFanTris() : fanTris();
+		if (r.tris && !isDisc(r.tris)) r = { reason: "the triangles overlap (not a disc on the loop)" };
 		if (r.tris) { made = r.tris; used = order[o]; }
 		else reasons.push(order[o] + ": " + r.reason);
 	}

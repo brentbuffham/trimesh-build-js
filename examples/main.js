@@ -275,6 +275,8 @@ async function loadSource() {
 		return fileSource(currentFile);
 	}
 	if (name === "wookey") return sampleSource("wookey-hole.laz");
+	if (name === "wookey2") return sampleSource("wookey-hole-2.laz");
+	if (name === "wookey3") return sampleSource("wookey-hole-3.laz");
 	return syntheticSource(name);
 }
 
@@ -418,7 +420,7 @@ var userSet = { thin: false, denoise: false };
 $("source").addEventListener("change", function () {
 	currentSource = null;
 	var isFile = $("source").value === "file";
-	var isCave = $("source").value === "wookey";
+	var isCave = /^wookey/.test($("source").value);
 	// Raw scans need thinning and denoising; synthetic clouds do not. The
 	// cave is low-noise photogrammetry: thin only, and no single viewpoint
 	// sees a whole cave.

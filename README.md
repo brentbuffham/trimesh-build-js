@@ -158,7 +158,7 @@ Winding spreads across the flattest edges first (Hoppe et al. 1992's minimum spa
 
 ## Sample data
 
-`examples/public/samples/wookey-hole.laz` is a 381,870-point survey of Wookey Hole cave, made with an iPhone 13 Pro photogrammetry workflow. It comes from [CaveSurveys, github.com/CaveSurveys/Wookey-Hole](https://github.com/CaveSurveys/Wookey-Hole), shared with "Feel free to distribute and use!". It drives a cave test and the demo's **Wookey Hole cave** source.
+`examples/public/samples/wookey-hole.laz` is a 381,870-point survey of Wookey Hole cave, made with an iPhone 13 Pro photogrammetry workflow. It comes from [CaveSurveys, github.com/CaveSurveys/Wookey-Hole](https://github.com/CaveSurveys/Wookey-Hole), shared with "Feel free to distribute and use!". It drives a cave test and the demo's **Wookey Hole cave** source. `wookey-hole-2.laz` (638,466 points) and `wookey-hole-3.laz` (194,016 points) are the survey's other two parts, in the same coordinate frame, taken from the vertices of its OBJ meshes; see `examples/public/samples/README.md`.
 
 At `thin: 0.05` it meshes in about 6 s to about 260,000 triangles. 99% of them are in one surface, with no non-manifold edges and no fold edges. It has no viewpoints, so each component is consistently wound but its overall direction is `"unresolved"`. The file is not part of the npm package.
 
