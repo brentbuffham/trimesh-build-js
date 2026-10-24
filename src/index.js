@@ -28,3 +28,4 @@ export { closeHoles } from "./post/closeHoles.js";
 export { fillGaps } from "./post/fillGaps.js";
 export { repairFolds } from "./post/repairFolds.js";
 export { patchLoop, patchLoops, patchLoopIds } from "./post/patchLoop.js";
+export { triangulateHole, fairFill } from "./post/fairFill.js";

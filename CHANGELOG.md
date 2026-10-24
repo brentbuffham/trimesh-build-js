@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **`patchLoop` method `"fair"` (Liepa 2003), first in `auto`.** Minimum-weight triangulation of the loop (sharpest crease, then area; never an edge the mesh already has), refined to the mesh's edge length, then the new points faired into the surface (scale-dependent umbrella, least squares, preconditioned conjugate gradients, fixed one ring of mesh around the loop). A cap cut from a sphere mesh refills to within 0.5% of the full volume (flat centroid fan: 9% short). Wookey Hole: 495 of 498 patched loops by `fair`, patching in about 1.2 s; part 3 closes completely. Also exported: `triangulateHole`, `fairFill`.
+- **Patches must be discs on their loop.** trimesh-boolean `triangulateLoop` can put two triangles on one loop edge, which made that edge non-manifold; such a patch is now refused and `auto` moves on.
+- **Wookey Hole parts 2 and 3** (`wookey-hole-2.laz`, `wookey-hole-3.laz`) in the demo and the tests.
+- `buildMesh` keeps the weld tolerance on its working mesh (`tolerance`), for the patch steps.
+
 ## 0.3.1 (2026-10-24)
 
 - **Orientation crosses the flattest edges first** (Hoppe et al. 1992's spanning tree, over triangles). Scan meshes can hold twisted, Möbius-like strips between holes, where no winding is consistent. Each strip's seam now lands on its fold, instead of wherever a breadth-first walk happened to meet itself. Wookey Hole: fold edges 1,773 → 461.

@@ -11,7 +11,7 @@ describe("patchLoop", function () {
 	it("auto is the default and reports the method it used", function () {
 		var r = cappedSphere();
 		var p = patchLoop(r, 0);
-		expect(p.method).toBe("fan");
+		expect(p.method).toBe("fair");
 		expect(r.mesh.closed).toBe(true);
 	});
 

@@ -138,6 +138,7 @@ function finishStages(s, rec) {
 	report("weld", 0);
 	var bms = ingestToBMS(vertexCoordsOf(cloud, constraints), rec.triangles, tolerance, constraints.firstId);
 	bms.origin = cloud.origin;
+	bms.tolerance = tolerance;  // weld distance, for the patch steps
 	var weld = cleanSoup(bms, constraints);
 
 	var viewpoints = opts.viewpoints ? opts.viewpoints.map(function (p) { return shiftPoint(p, cloud.origin); }) : null;

@@ -8,13 +8,14 @@
 // to agree with the mesh triangle across a shared loop edge. Here
 // edges are matched by PoolVertex id (exact) rather than rounded keys.
 //
+// method "fair"      - Liepa 2003 (fairFill.js): best triangulation of the
+//                      loop, refined to the mesh's edge length, new points
+//                      faired into the surface so the patch follows it.
 // method "fan"       - triangulateLoop: no new points (Kirra Fill).
 // method "centroid"  - one new point at the loop centroid, fanned to
 //                      every loop edge; suits big, roughly round holes.
 // method "vertexFan" - fan from one loop vertex, trying each in turn.
-// method "auto"      - (default) fan, then centroid, then vertexFan:
-//                      cave loops are rarely flat, so Kirra's fan alone
-//                      refuses most of them.
+// method "auto"      - (default) fair, then fan, centroid, vertexFan.
 // Figure-8 loops arrive already split (validateMesh), so each lobe is
 // patched on its own.
 //
@@ -25,6 +26,7 @@
 //=============================================================
 
 import { triangulateLoop } from "trimesh-boolean";
+import { fairFill } from "./fairFill.js";
 import { edgesOf, markCurrent, poolEdgeKey } from "../bms/edges.js";
 import { orientMesh } from "../bms/orientMesh.js";
 import { validateMesh } from "../validate/validateMesh.js";
@@ -41,7 +43,7 @@ function runs(t, a, b) {
  * @param {{pool: Object, soup: Array<Object>, constraintPoolEdges?: Set<string>}} bms - soup is appended to
  * @param {import("../bms/edges.js").EdgeTable} edges - edgesOf(bms), kept up to date here (call markCurrent after)
  * @param {number[]} loop - PoolVertex ids in order, not repeated at the end
- * @param {"auto"|"fan"|"centroid"|"vertexFan"} method - auto tries fan, centroid, vertexFan
+ * @param {"auto"|"fair"|"fan"|"centroid"|"vertexFan"} method - auto tries fair, fan, centroid, vertexFan
  * @returns {{added: number, reason: string|null, method: string|null}} method actually used
  */
 export function patchLoopIds(bms, edges, loop, method) {
@@ -110,6 +112,77 @@ export function patchLoopIds(bms, edges, loop, method) {
 		return { reason: "every vertex fan would give an edge a third face" };
 	}
 
+	// fair: Liepa 2003 (fairFill.js) - minimum-weight triangulation, refined to
+	// the mesh's edge length, new points faired into the surrounding surface
+	function fairTris() {
+		var P = new Float64Array(3 * n), outer = new Float64Array(3 * n), index = new Map();
+		for (var i = 0; i < n; i++) {
+			var v = byId[loop[i]];
+			P[3 * i] = v.x; P[3 * i + 1] = v.y; P[3 * i + 2] = v.z;
+			index.set(loop[i], i);
+		}
+		// mesh triangle on each loop edge: its normal, signed as a patch triangle faces
+		for (var e = 0; e < n; e++) {
+			var a = loop[e], b = loop[(e + 1) % n], t = bms.soup[edges.tri(poolEdgeKey(a, b), 0)];
+			var ux = t.v1.x - t.v0.x, uy = t.v1.y - t.v0.y, uz = t.v1.z - t.v0.z;
+			var wx = t.v2.x - t.v0.x, wy = t.v2.y - t.v0.y, wz = t.v2.z - t.v0.z;
+			var nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
+			var l = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1, s = runs(t, a, b) ? 1 : -1;
+			outer[3 * e] = s * nx / l; outer[3 * e + 1] = s * ny / l; outer[3 * e + 2] = s * nz / l;
+		}
+		// one ring of mesh around each loop vertex: walk its fan of triangles
+		// from the loop edge to the next, across 2-face edges
+		var ring = [];
+		for (var r = 0; r < n; r++) {
+			var c = loop[r], next = loop[(r + 1) % n], out = [], prev = next;
+			var cur = edges.tri(poolEdgeKey(c, next), 0), seen = new Set();
+			out.push(index.get(next));
+			while (cur >= 0 && !seen.has(cur) && seen.size < 1000) {
+				seen.add(cur);
+				var tr = bms.soup[cur], ids = [tr.v0.id, tr.v1.id, tr.v2.id], w = -1;
+				for (var q = 0; q < 3; q++) if (ids[q] !== c && ids[q] !== prev) w = ids[q];
+				if (w < 0) break;
+				out.push(index.has(w) ? index.get(w) : [byId[w].x, byId[w].y, byId[w].z]);
+				var k = poolEdgeKey(c, w);
+				if (edges.count(k) !== 2) break;
+				cur = edges.tri(k, 0) === cur ? edges.tri(k, 1) : edges.tri(k, 0);
+				prev = w;
+			}
+			ring.push(out);
+		}
+		var f = fairFill(P, {
+			outer: outer,
+			ring: ring,
+			forbidden: function (i, k) { return faces(loop[i], loop[k]) > 0; }
+		});
+		if (f.reason) return { reason: f.reason };
+		// The pool merges a new point into any vertex within tolerance. That is
+		// fine for a vertex no triangle uses (left by repairFolds, say), not for
+		// one the mesh uses or one this patch already has.
+		// A point that would merge is pushed out to 1.5 x the tolerance from
+		// that vertex (under the weld distance, so the shape does not change)
+		// and tried again, up to three times.
+		var verts = loop.map(function (id) { return byId[id]; });
+		var used = usedVertices(bms), mine = new Set(loop), count = f.points.length / 3;
+		var push = 1.5 * (bms.tolerance || (bms.report && bms.report.tolerance) || 0.001);
+		for (var p = 0; p < count; p++) {
+			var x = f.points[3 * p], y = f.points[3 * p + 1], z = f.points[3 * p + 2], pv = null;
+			for (var tries = 0; tries < 4 && !pv; tries++) {
+				var before = bms.pool.size(), got = bms.pool.getOrCreate(x, y, z);
+				if (bms.pool.size() > before || !(used.has(got.id) || mine.has(got.id))) { pv = got; break; }
+				var dx = x - got.x, dy = y - got.y, dz = z - got.z, dl = Math.sqrt(dx * dx + dy * dy + dz * dz);
+				if (!(dl > 0)) { dx = 0; dy = 0; dz = 1; dl = 1; }
+				x = got.x + dx / dl * push; y = got.y + dy / dl * push; z = got.z + dz / dl * push;
+			}
+			if (!pv) return { reason: "a new point lands on a vertex the mesh already uses" };
+			mine.add(pv.id);
+			verts.push(pv);
+		}
+		var tl = f.tris.map(function (t) { return { v0: verts[t[0]], v1: verts[t[1]], v2: verts[t[2]] }; });
+		if (!diagonalsFree(tl)) return { reason: "the patch would give an edge a third face" };
+		return { tris: tl };
+	}
+
 	// A patch must be a disc on the loop: every loop edge used once, every
 	// edge of its own used twice. (triangulateLoop can overlap two triangles
 	// on one loop edge, which made that edge non-manifold.)
@@ -128,10 +201,10 @@ export function patchLoopIds(bms, edges, loop, method) {
 		return ok;
 	}
 
-	var order = method === "auto" ? ["fan", "centroid", "vertexFan"] : [method];
+	var order = method === "auto" ? ["fair", "fan", "centroid", "vertexFan"] : [method];
 	var made = null, used = null, reasons = [];
 	for (var o = 0; o < order.length && !made; o++) {
-		var r = order[o] === "centroid" ? centroidTris() : order[o] === "vertexFan" ? vertexFanTris() : fanTris();
+		var r = order[o] === "fair" ? fairTris() : order[o] === "centroid" ? centroidTris() : order[o] === "vertexFan" ? vertexFanTris() : fanTris();
 		if (r.tris && !isDisc(r.tris)) r = { reason: "the triangles overlap (not a disc on the loop)" };
 		if (r.tris) { made = r.tris; used = order[o]; }
 		else reasons.push(order[o] + ": " + r.reason);
@@ -164,6 +237,20 @@ export function patchLoopIds(bms, edges, loop, method) {
 	return { added: tris.length, reason: null, method: used };
 }
 
+// PoolVertex ids used by bms.soup, cached while triangles are only appended
+function usedVertices(bms) {
+	var c = bms._used;
+	if (!c || c.soup !== bms.soup || c.length > bms.soup.length) {
+		c = { soup: bms.soup, length: 0, ids: new Set() };
+		Object.defineProperty(bms, "_used", { value: c, writable: true, configurable: true, enumerable: false });
+	}
+	for (; c.length < bms.soup.length; c.length++) {
+		var t = bms.soup[c.length];
+		c.ids.add(t.v0.id); c.ids.add(t.v1.id); c.ids.add(t.v2.id);
+	}
+	return c.ids;
+}
+
 // A loop given as an index, PoolVertex ids, or world points [x, y, z] / {x, y, z}
 function resolveLoop(result, loop) {
 	if (typeof loop === "number") {
@@ -193,7 +280,7 @@ function resolveLoop(result, loop) {
 	return { ids: ids };
 }
 
-var METHODS = { auto: 1, fan: 1, centroid: 1, vertexFan: 1 };
+var METHODS = { auto: 1, fair: 1, fan: 1, centroid: 1, vertexFan: 1 };
 
 // Default auto: Kirra's fan first, then the fallbacks
 function methodOf(options) {
@@ -219,7 +306,7 @@ function refresh(result, bms) {
  * @param {Object} result - from buildMesh; changed in place
  * @param {number|number[]|Array<number[]|{x: number, y: number, z: number}>} loop -
  *   an index into result.mesh.boundaryLoops, PoolVertex ids, or world points
- * @param {{method?: "auto"|"fan"|"centroid"|"vertexFan"}} [options] - method default "auto"
+ * @param {{method?: "auto"|"fair"|"fan"|"centroid"|"vertexFan"}} [options] - method default "auto"
  * @returns {{added: number, method: string|null, refused: Array<{loop: *, reason: string}>}}
  */
 export function patchLoop(result, loop, options) {
@@ -238,8 +325,8 @@ export function patchLoop(result, loop, options) {
 /**
  * Patch every boundary loop with at most maxEdges edges (or the loops given).
  * @param {Object} result - from buildMesh; changed in place
- * @param {{maxEdges?: number, loops?: Array, method?: "auto"|"fan"|"centroid"|"vertexFan"}} [options]
- * @returns {{added: number, patched: number, methods: {fan: number, centroid: number, vertexFan: number},
+ * @param {{maxEdges?: number, loops?: Array, method?: "auto"|"fair"|"fan"|"centroid"|"vertexFan"}} [options]
+ * @returns {{added: number, patched: number, methods: {fair: number, fan: number, centroid: number, vertexFan: number},
  *   refused: Array<{loop: *, reason: string}>}}
  */
 export function patchLoops(result, options) {
@@ -249,7 +336,7 @@ export function patchLoops(result, options) {
 	var bms = bmsOf(result);
 	var edges = edgesOf(bms);
 	var added = 0, patched = 0, refused = [];
-	var methods = { fan: 0, centroid: 0, vertexFan: 0 };
+	var methods = { fair: 0, fan: 0, centroid: 0, vertexFan: 0 };
 	var loops = opts.loops || result.mesh.boundaryLoops.filter(function (l) { return l.length <= maxEdges; });
 	for (var i = 0; i < loops.length; i++) {
 		var r = resolveLoop(result, loops[i]);

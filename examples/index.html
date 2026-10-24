@@ -101,8 +101,9 @@
 			<button id="exportObj">Export OBJ</button>
 			<span class="sep"></span>
 			<label title="Click near a red loop to select it"><input type="checkbox" id="patchMode"> patch loops</label>
-			<select id="patchMethod" title="auto: fan, then centroid, then vertex fan. fan: Kirra Fill, no new points. centroid: one new point, fanned. vertex fan: fan from a loop vertex">
+			<select id="patchMethod" title="auto: fair, then fan, then centroid, then vertex fan. fair: Liepa fill, refined and faired into the surface. fan: Kirra Fill, no new points. centroid: one new point, fanned. vertex fan: fan from a loop vertex">
 				<option value="auto">auto</option>
+				<option value="fair">fair</option>
 				<option value="fan">fan</option>
 				<option value="centroid">centroid</option>
 				<option value="vertexFan">vertex fan</option>

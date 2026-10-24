@@ -39,7 +39,9 @@ describe("Wookey Hole cave sample", function () {
 		expect(p.patched).toBeGreaterThan(0.99 * before);
 		expect(r.mesh.nonManifoldEdgeCount).toBe(0);
 		expect(r.mesh.orientationConflicts).toBe(0);
-		expect(p.methods.fan + p.methods.centroid + p.methods.vertexFan).toBe(p.patched);
+		expect(p.methods.fair + p.methods.fan + p.methods.centroid + p.methods.vertexFan).toBe(p.patched);
+		// Liepa fill takes nearly every loop
+		expect(p.methods.fair).toBeGreaterThan(0.95 * p.patched);
 	}, 120000);
 
 	// Parts 2 and 3 of the same survey (mesh1.obj and mesh2.obj vertices)

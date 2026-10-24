@@ -94,19 +94,22 @@ patchLoop(result, pickedPoints);                        // or world [x, y, z] po
 patchLoop(result, 2, { method: "centroid" });           // force one method
 patchLoops(result, { maxEdges: 50 });                   // every loop up to 50 edges
 // patchLoop  -> { added, method, refused: [{ loop, reason }] }
-// patchLoops -> { added, patched, methods: { fan, centroid, vertexFan }, refused }
+// patchLoops -> { added, patched, methods: { fair, fan, centroid, vertexFan }, refused }
 ```
 
 | `method` | What it does |
 |---|---|
-| `"auto"` (default) | Tries `fan`, then `centroid`, then `vertexFan`, and uses the first that is valid. |
+| `"auto"` (default) | Tries `fair`, then `fan`, `centroid` and `vertexFan`, and uses the first that is valid. |
+| `"fair"` | Liepa (2003): the best triangulation of the loop, refined to the mesh's edge length, with the new points faired (smoothed) into the surrounding surface, so the patch bulges with the wall instead of cutting across it. |
 | `"fan"` | Kirra's Fill: `triangulateLoop` on the loop's own vertices. No new points. |
 | `"centroid"` | One new point at the loop centre, fanned to every loop edge. |
 | `"vertexFan"` | A fan from one loop vertex to all the others, trying each vertex in turn. |
 
 **Figure-8 loops.** A loop that passes through one vertex twice, where two holes touch at a pinch point, is split there into simple loops (ported from trimesh-boolean's `_splitSelfTouching`). Each lobe is then patched on its own.
 
-**What works on real data.** Cave loops are rarely flat, so the fan alone refuses most of them: its diagonals already exist in the mesh, or the loop can't be triangulated in projection. On the Wookey Hole sample at 5 cm thinning, `auto` closes 498 of 500 loops (57 by fan, 431 by centroid, 10 by vertex fan) with no non-manifold edges and no fold edges.
+**What works on real data.** On the Wookey Hole sample at 5 cm thinning, `auto` closes 498 of 500 loops, 495 of them by `fair`, in about 1.2 s, with no non-manifold edges and no fold edges. Part 3 of the survey closes completely. A spherical cap cut from a sphere mesh (9% of its volume) refills to within 0.5% of the full volume with `fair`, against 9% short with a flat centroid fan.
+
+`fair` steps aside, and `auto` moves on, when the patch would come within the weld tolerance of the mesh (it pushes a point out up to three times first) or when every triangulation needs an edge the mesh already has. Loops over 400 edges start from a centroid fan rather than the O(n³) best triangulation. Where the mesh reaches into a hole with long, thin triangles, the patch's first row stays as coarse as those loop edges (loop edges are never split), so it follows the surface less well there.
 
 A loop is refused, never thrown on, when it runs along a break line, isn't simple, or when every method would give an edge a third triangle. `fillGaps` (automatic, loops of 6 edges or fewer, `auto`) and `closeHoles` (opt-in, centroid) use the same per-loop code. In the demo, tick **patch loops** and click near a red loop, then press **Patch selected** or Enter, or use **Patch all**.
 

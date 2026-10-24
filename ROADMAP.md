@@ -4,7 +4,10 @@ trimesh-build-js is built for Kirra: caves, drives, tunnels and blast-hole voids
 
 ## v0.4: mesh quality on real scans
 
-1. **Fairing hole fill for large, twisted loops** (the spec's `retriangulate`). A flat fan across a long cave loop closes it but folds and gives the wrong volume. Use Liepa 2003: triangulate the hole, refine it to the surrounding edge length, then smooth (fair) the new points so the patch follows the surface. Add it as a `patchLoop` method and try it in `auto` before the centroid fan on long loops.
+1. **Hole fill follow-ups** (`fair` is done).
+   - Split the mesh triangles on long loop edges before filling. Where the mesh reaches into a hole with long, thin triangles, loop edges are several spacings long, and the patch's first row stays that coarse. On a sphere cap with such a rim, `fair` is 5.8% short against 0.4% on a clean rim.
+   - The 1,144-edge loop on Wookey part 3 still falls back to the centroid fan: its faired patch comes within the weld tolerance of the mesh. Test patch triangles against nearby mesh triangles instead of point distance alone.
+   - Fix trimesh-boolean `triangulateLoop` returning two triangles on one loop edge (patchLoop refuses those patches now).
 2. **Cave orientation without scanner positions.** Use photogrammetry camera positions when the scan carries them. Otherwise, take the passage centre line as viewpoints (it lies inside the void by definition), so a cave orients as `"viewpoint"` rather than `"unresolved"`.
 3. **Folds that don't twist.** `repairFolds` finds folds through the orientation conflicts they cause. A Z-fold (the surface doubling back on itself and on again) orients cleanly, so it isn't found. Detect it by a sharp crease between triangles wound the same way, or by face normals that disagree with the point normals, then cut and patch it the same way.
 
