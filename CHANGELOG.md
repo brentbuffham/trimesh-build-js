@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (2026-10-24)
 
-- **Open components get a sign without scanner positions: `"visibility"`.** A ray vote (after Takayama, Jacobson & Sorkine 2014) casts rays into both sides from sampled triangles, and normals point at the side whose rays come back off the opposite wall: the void of a cave, drive or blast hole, or the air above a pit floor. A weak vote, as on flat terrain, stays `"unresolved"`. The `buildMesh` option is `visibility` (on by default; `false`, or `{ samples, rays, minMargin }`). New report fields: `report.visibilityMs`, and `perComponent[i].margin`. `orientMesh` now also returns `componentOf`. Exported: `orientByVisibility`. Wookey Hole orients as `"visibility"` in about 0.24 s; on part 3, the cave's sign matches the closed mesh's signed volume on every triangle.
+- **Open components get a sign without scanner positions: `"visibility"`.** A ray vote (after Takayama, Jacobson & Sorkine 2014) casts rays into both sides from sampled triangles, and normals point at the side whose rays come back off the opposite wall: the void of a cave, drive or blast hole, or the air above a pit floor. A weak vote, as on flat terrain, stays `"unresolved"`. The `buildMesh` option is `visibility` (on by default; `false`, or `{ samples, rays, minMargin }`). New report fields: `report.visibilityMs`, and `perComponent[i].margin`. `orientMesh` now also returns `componentOf`. Exported: `orientByVisibility`. Wookey Hole orients as `"visibility"` in about 0.2 s; on part 3, the cave's sign matches the closed mesh's signed volume on every triangle.
 - **Demo:** a **ray vote** checkbox; the vote's margin is shown next to the orientation.
 
 ## 0.4.1 (2026-10-24)
