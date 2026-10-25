@@ -12,7 +12,6 @@
 
 // ── Pipeline ──
 export { buildMesh, buildMeshAsync, DEFAULT_OPTIONS } from "./buildMesh.js";
-export { toIndexed } from "./output/toIndexed.js";
 export { TrimeshBuildError, ERROR_CODES } from "./errors.js";
 
 // ── Stages ──
@@ -20,13 +19,7 @@ export { prepareCloud } from "./input/prepareCloud.js";
 export { insertConstraints, EMPTY_CONSTRAINTS } from "./constraints/insertConstraints.js";
 export { RECONSTRUCTORS } from "./reconstruct/index.js";
 export { runLocalDelaunay, proposeTriangles, acceptProposals } from "./reconstruct/localDelaunay/run.js";
-export { ingestToBMS } from "./bms/ingestToBMS.js";
-export { cleanSoup } from "./bms/cleanSoup.js";
-export { orientMesh } from "./bms/orientMesh.js";
-export { orientByVisibility } from "./bms/visibility.js";
-export { validateMesh, pointInside } from "./validate/validateMesh.js";
-export { closeHoles } from "./post/closeHoles.js";
-export { fillGaps } from "./post/fillGaps.js";
-export { repairFolds } from "./post/repairFolds.js";
-export { patchLoop, patchLoops, patchLoopIds } from "./post/patchLoop.js";
-export { triangulateHole, fairFill } from "./post/fairFill.js";
+// ── Repair (moved to trimesh-repair-js in 0.6.0) ──
+// Re-exported for one release so existing imports keep working; import them from
+// trimesh-repair-js instead - these re-exports go in 0.7.0.
+export { toIndexed, ingestToBMS, cleanSoup, orientMesh, orientByVisibility, validateMesh, pointInside, closeHoles, fillGaps, repairFolds, patchLoop, patchLoops, patchLoopIds, triangulateHole, fairFill } from "trimesh-repair-js";

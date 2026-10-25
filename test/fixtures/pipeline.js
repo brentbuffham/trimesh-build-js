@@ -6,8 +6,7 @@
 import { prepareCloud } from "../../src/input/prepareCloud.js";
 import { runLocalDelaunay } from "../../src/reconstruct/localDelaunay/run.js";
 import { EMPTY_CONSTRAINTS } from "../../src/constraints/insertConstraints.js";
-import { ingestToBMS } from "../../src/bms/ingestToBMS.js";
-import { cleanSoup } from "../../src/bms/cleanSoup.js";
+import { ingestToBMS, cleanSoup } from "trimesh-repair-js";
 
 export var DEFAULTS = { k: 20, maxRadiusMultiplier: 3, minNeighbours: 6, normalAgreement: 0.5, maxPlaneOffset: 0.5, minVotes: 2 };
 

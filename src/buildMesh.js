@@ -19,14 +19,8 @@ import { RECONSTRUCTORS } from "./reconstruct/index.js";
 import { acceptProposals } from "./reconstruct/localDelaunay/run.js";
 import { proposeInitMessage } from "./workers/proposeHandler.js";
 import { vertexCoordsOf } from "./reconstruct/vertexCoords.js";
-import { ingestToBMS } from "./bms/ingestToBMS.js";
-import { cleanSoup } from "./bms/cleanSoup.js";
-import { orientMesh } from "./bms/orientMesh.js";
-import { orientByVisibility } from "./bms/visibility.js";
-import { validateMesh } from "./validate/validateMesh.js";
-import { closeHoles } from "./post/closeHoles.js";
-import { fillGaps } from "./post/fillGaps.js";
-import { repairFolds } from "./post/repairFolds.js";
+// The clean-up stages live in trimesh-repair-js (moved there from this library in 0.6.0).
+import { ingestToBMS, cleanSoup, orientMesh, orientByVisibility, validateMesh, closeHoles, fillGaps, repairFolds } from "trimesh-repair-js";
 import { markWeldDuplicates } from "./input/markWeldDuplicates.js";
 import { TrimeshBuildError, ERROR_CODES } from "./errors.js";
 
@@ -246,7 +240,7 @@ function finishStages(s, rec) {
  * @param {Object} cols - las-laz-js columns: { count, positions } or { count, x, y, z }
  * @param {Object} [options] - see spec section 4; also `thin` (min spacing, world units), `denoise` (true or las-laz-js denoisePoints options), `maxPoints`, `onProgress(stage, fraction)` and `algorithm`
  * @returns {{pool: Object, soup: Array<Object>, origin: {x: number, y: number, z: number},
- *   mesh: import("./validate/validateMesh.js").MeshResult, unfilledLoops: number[][], report: Object}}
+ *   mesh: import("trimesh-repair-js/src/validate/validateMesh.js").MeshResult, unfilledLoops: number[][], report: Object}}
  */
 export function buildMesh(cols, options) {
 	var s = prepareStages(cols, options);

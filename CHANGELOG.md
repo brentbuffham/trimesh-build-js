@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0
+
+- **The repair functions moved to [trimesh-repair-js](https://github.com/brentbuffham/trimesh-repair-js) 0.1.0**, unchanged: `ingestToBMS`, `cleanSoup`, `orientMesh`, `orientByVisibility`, `validateMesh`, `pointInside`, `closeHoles`, `fillGaps`, `repairFolds`, `patchLoop`, `patchLoops`, `patchLoopIds`, `triangulateHole`, `fairFill`, `toIndexed`. `buildMesh` uses them from there; this library depends on trimesh-repair-js ^0.1.0.
+- **Deprecated:** importing those names from trimesh-build-js. They are re-exported for this release and removed in 0.7.0 - import them from trimesh-repair-js.
+- Their tests moved with them; the Wookey Hole test stays here (it tests `buildMesh`).
+
 ## 0.5.0 (2026-10-24)
 
 - **Open components get a sign without scanner positions: `"visibility"`.** A ray vote (after Takayama, Jacobson & Sorkine 2014) casts rays into both sides from sampled triangles, and normals point at the side whose rays come back off the opposite wall: the void of a cave, drive or blast hole, or the air above a pit floor. A weak vote, as on flat terrain, stays `"unresolved"`. The `buildMesh` option is `visibility` (on by default; `false`, or `{ samples, rays, minMargin }`). New report fields: `report.visibilityMs`, and `perComponent[i].margin`. `orientMesh` now also returns `componentOf`. Exported: `orientByVisibility`. Wookey Hole orients as `"visibility"` in about 0.2 s; on part 3, the cave's sign matches the closed mesh's signed volume on every triangle.

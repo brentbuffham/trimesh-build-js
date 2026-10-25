@@ -84,6 +84,8 @@ At 1M points on a 24-core machine the whole build takes about 14.5 s (triangulat
 
 ### Patching loops
 
+> **From 0.6.0 the repair functions below live in [trimesh-repair-js](https://github.com/brentbuffham/trimesh-repair-js)** and are re-exported here for one release; import them from trimesh-repair-js.
+
 `patchLoop` fills one open loop you choose. It works like **Fill** in Kirra's Mesh Edit, and is ported from `LocalVoidFill.fillLoopWithTriangles`. It uses trimesh-boolean's `triangulateLoop` on the loop's own vertices and turns each new triangle to agree with its neighbour. The result is then re-oriented and re-validated, so `result.mesh` stays current.
 
 ```js
