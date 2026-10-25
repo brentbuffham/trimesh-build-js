@@ -11,6 +11,11 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { syntheticSource, fileSource, sampleSource } from "./clouds.js";
+import pkg from "../package.json";
+
+// ── Version badge, read from package.json so it cannot go stale ──
+var vEl = document.getElementById("lib-version");
+if (vEl) vEl.textContent = "v" + pkg.version;
 
 var $ = function (id) { return document.getElementById(id); };
 
