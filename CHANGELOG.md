@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1
+
+- **Depends on las-laz-js ^0.12.0** (fragments and size distribution; nothing this library uses changed).
+
 ## 0.6.0
 
 - **The repair functions moved to [trimesh-repair-js](https://github.com/brentbuffham/trimesh-repair-js) 0.1.0**, unchanged: `ingestToBMS`, `cleanSoup`, `orientMesh`, `orientByVisibility`, `validateMesh`, `pointInside`, `closeHoles`, `fillGaps`, `repairFolds`, `patchLoop`, `patchLoops`, `patchLoopIds`, `triangulateHole`, `fairFill`, `toIndexed`. `buildMesh` uses them from there; this library depends on trimesh-repair-js ^0.1.0.
