@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.2
+
+- **Depends on las-laz-js ^0.14.1** (parallel fragments and facets; `sizeDistribution` fines and `unresolved`). Nothing this library uses changed: `dedupe`, `denoisePoints`, `buildIndex`, `pointNormals` and `pointsInRadius` are as in 0.12.
+
 ## 0.6.1
 
 - **Depends on las-laz-js ^0.12.0** (fragments and size distribution; nothing this library uses changed).
