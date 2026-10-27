@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.5
+
+- **Depends on las-laz-js ^0.17.0** (stray points, sparse points and roughness on a tile store). Nothing this library uses changed: `dedupe`, `denoisePoints`, `buildIndex`, `pointNormals` and `pointsInRadius` are as in 0.16. A 0.x caret stops at the next minor, so `^0.16.1` would have left a second copy of las-laz-js in an app that moved to 0.17.
+
 ## 0.6.4
 
 - **Depends on las-laz-js ^0.16.1** (align, dedupe, smooth, merge and split on tile stores). Nothing this library uses changed: `dedupe`, `denoisePoints`, `buildIndex`, `pointNormals` and `pointsInRadius` are as in 0.15. A 0.x caret stops at the next minor, so `^0.15.0` would have left a second copy of las-laz-js in an app that moved to 0.16.
