@@ -13,6 +13,7 @@
 // ── Pipeline ──
 export { buildMesh, buildMeshAsync, DEFAULT_OPTIONS } from "./buildMesh.js";
 export { TrimeshBuildError, ERROR_CODES } from "./errors.js";
+export { VERSION, GENERATOR_VERSION } from "./version.js";
 
 // ── Stages ──
 export { prepareCloud } from "./input/prepareCloud.js";

@@ -23,6 +23,7 @@ import { vertexCoordsOf } from "./reconstruct/vertexCoords.js";
 import { ingestToBMS, cleanSoup, orientMesh, orientByVisibility, validateMesh, closeHoles, fillGaps, repairFolds } from "trimesh-repair-js";
 import { markWeldDuplicates } from "./input/markWeldDuplicates.js";
 import { TrimeshBuildError, ERROR_CODES } from "./errors.js";
+import { VERSION, GENERATOR_VERSION } from "./version.js";
 
 export var DEFAULT_OPTIONS = Object.freeze({
 	algorithm: "localDelaunay",
@@ -222,6 +223,8 @@ function finishStages(s, rec) {
 		mesh: mesh,
 		unfilledLoops: unfilled,
 		report: {
+			version: VERSION,
+			generatorVersion: GENERATOR_VERSION,
 			pointsInput: pointsInput,
 			pointsAfterThin: input.count,
 			pointsMergedAtTolerance: cloud.mergedAtTolerance,
