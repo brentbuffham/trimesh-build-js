@@ -11,21 +11,24 @@ trimesh-build-js is built for Kirra: caves, drives, tunnels and blast-hole voids
 2. **Thin closed bubbles.** After `patchLoops`, an isolated sheet can close into a pancake whose near-zero volume sets its sign (Wookey part 3: 6,813 triangles, −0.27 m³), undoing the ray vote. Treat a closed component whose volume is small against its area × edge length as open, and vote it.
 3. **Folds that don't twist.** `repairFolds` finds folds through the orientation conflicts they cause. A Z-fold (the surface doubling back on itself and on again) orients cleanly, so it isn't found. Detect it by a sharp crease between triangles wound the same way, or by face normals that disagree with the point normals, then cut and patch it the same way.
 
+4. **Break lines on hard creases** (`test/creaseBreakline.test.js`, measured 2026-10-29). A tent ridge with a break line along it works up to about 75 degrees between the two faces' normals: the crease is a chain of straight edges with a face on each side, and nothing straddles it. At 90 degrees and past, the break line is no longer a shared edge: its edges have a face on one side only, and at 90-113 degrees the sheet also tears into 26 open loops. Lowering `normalAgreement` or raising `maxPlaneOffset` does not fix it (at 127 degrees `maxPlaneOffset` alone gets the straddlers to 0 but still leaves one-sided edges), so the cause is the local plane fit straddling both walls, not the bridging guard alone. Two `it.fails` tests pin this; drop the `.fails` when it is fixed. Idea: fit each side's plane from the points on that side of the break line.
+5. **Self-intersections are neither detected nor reported.** `report` counts open loops, non-manifold edges and folds, but not crossing triangles. trimesh-boolean's `bmsSelfIntersect` on Wookey part 3 after `patchLoops` (185,454 triangles, 14 s): 15,798 crossing pairs and 17,279 intersection segments. Not yet traced to the original surface or to the patch triangles. Add a count to `validateMesh` (or a `checkSelfIntersections` option), then trace where they come from.
+
 ## v0.5: scale and Kirra
 
-4. **Speed.** 0.3.0 has integer edge keys, one shared edge table, and normals and patches on worker threads. What's left on WALL.las at thin 0.1 (33.7 s): the weld (9.3 s), orientation (6.1 s) and las-laz-js thinning (5.2 s), all still on objects or maps rather than typed arrays. Then tile multi-million-point clouds with overlapping halos (prototype step 8 of the original spec). Also: `checkCrossings` is O(S²) on long break lines.
-5. **Kirra integration.**
+6. **Speed.** 0.3.0 has integer edge keys, one shared edge table, and normals and patches on worker threads. What's left on WALL.las at thin 0.1 (33.7 s): the weld (9.3 s), orientation (6.1 s) and las-laz-js thinning (5.2 s), all still on objects or maps rather than typed arrays. Then tile multi-million-point clouds with overlapping halos (prototype step 8 of the original spec). Also: `checkCrossings` is O(S²) on long break lines.
+7. **Kirra integration.**
    - A "Mesh from point cloud" dialog (FloatingDialog, worker, PresetBar), feeding `toIndexed` into `addGeneratedSurface`.
    - Mesh Edit's **Fill** switched to `patchLoop` (`auto`, figure-8 splitting, refusal reasons).
    - Kirra's copy of `triangulateLoop` in `MeshRepairHelper.js` retired (Rule Zero).
-6. **Move shared code into trimesh-boolean.** Export the figure-8 loop split (`_splitSelfTouching`, private today) and the per-loop patch core from trimesh-boolean, so Kirra and both libraries use one copy. This follows the original spec's rule: when this library needs more from trimesh-boolean, add it to trimesh-boolean's public exports.
+8. **Move shared code into trimesh-boolean.** Export the figure-8 loop split (`_splitSelfTouching`, private today) and the per-loop patch core from trimesh-boolean, so Kirra and both libraries use one copy. This follows the original spec's rule: when this library needs more from trimesh-boolean, add it to trimesh-boolean's public exports.
 
 ## v0.6: more algorithms and tools
 
-7. **More reconstruction algorithms** in the registry: screened Poisson (always closed, so always has a volume, but it fills occluded areas the scan didn't see), and ball pivoting. Poisson needs consistently signed point normals: take them from the oriented mesh (now free of twists), or orient them with Hoppe's spanning tree over the kNN graph.
-8. **Decimation and smoothing** (`DecimateMesh`, `SmoothMesh` in the spec) that never move break line vertices, with a limit on how far smoothing may move a point.
-9. **Blast-hole tools (low priority).** Fit a hole axis or cylinder to a hole-void scan, and report its volume against the design hole using trimesh-boolean booleans.
-10. **Deferred items from the v0.1 review.**
+9. **More reconstruction algorithms** in the registry: screened Poisson (always closed, so always has a volume, but it fills occluded areas the scan didn't see), and ball pivoting. Poisson needs consistently signed point normals: take them from the oriented mesh (now free of twists), or orient them with Hoppe's spanning tree over the kNN graph.
+10. **Decimation and smoothing** (`DecimateMesh`, `SmoothMesh` in the spec) that never move break line vertices, with a limit on how far smoothing may move a point.
+11. **Blast-hole tools (low priority).** Fit a hole axis or cylinder to a hole-void scan, and report its volume against the design hole using trimesh-boolean booleans.
+12. **Deferred items from the v0.1 review.**
     - Warn when a break line sits off the surface.
     - Choose k adaptively.
     - Validate input before thinning, so error messages name the right point index.
