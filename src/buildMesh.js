@@ -39,6 +39,15 @@ export var DEFAULT_OPTIONS = Object.freeze({
 	closeHoles: false
 });
 
+// An option the caller passed as undefined means "not given": Object.assign
+// would copy the undefined over the default.
+function withDefaults(defaults, options) {
+	var out = Object.assign({}, defaults);
+	if (!options) return out;
+	for (var key in options) if (options[key] !== undefined) out[key] = options[key];
+	return out;
+}
+
 // las-laz-js dedupe needs x, y, z columns
 function xyzColumns(cols) {
 	if (cols.x && cols.y && cols.z) return { count: cols.count, x: cols.x, y: cols.y, z: cols.z };
@@ -86,7 +95,7 @@ function shiftPoint(p, o) {
 // Everything before the reconstructor: options, thin, denoise, prepare,
 // break lines. Shared by buildMesh and buildMeshAsync.
 function prepareStages(cols, options, deferNormals) {
-	var opts = Object.assign({}, DEFAULT_OPTIONS, options || {});
+	var opts = withDefaults(DEFAULT_OPTIONS, options);
 	var reconstruct = RECONSTRUCTORS[opts.algorithm];
 	if (!reconstruct) throw new TrimeshBuildError(ERROR_CODES.INVALID_INPUT, "unknown algorithm " + String(opts.algorithm));
 
@@ -98,7 +107,8 @@ function prepareStages(cols, options, deferNormals) {
 
 	var pointsInput = cols && cols.count;
 	var input = cols;
-	if (opts.thin) {
+	// thin 0 (or false) is off; NaN is a mistake, not "off"
+	if (opts.thin || Number.isNaN(opts.thin)) {
 		if (!(opts.thin > 0)) throw new TrimeshBuildError(ERROR_CODES.INVALID_INPUT, "thin must be a distance > 0");
 		report("thin", 0);
 		input = dedupe(xyzColumns(cols), opts.thin, { z: true });
@@ -113,11 +123,17 @@ function prepareStages(cols, options, deferNormals) {
 		// prepares the smoothed points and keeps the first pass's origin.
 		var first = prepareCloud(input, Object.assign({}, opts, { normals: new Float32Array(3 * input.count), minSpacing: opts.thin || 0 }));
 		var d = opts.denoise === true ? {} : opts.denoise;
+		var dk = d.k === undefined ? 16 : d.k;
+		var iterations = d.iterations === undefined ? 1 : d.iterations;
+		var maxDistance = d.maxDistance === undefined ? 5 * first.medianSpacing : d.maxDistance;
+		if (!(Number.isInteger(dk) && dk >= 1)) throw new TrimeshBuildError(ERROR_CODES.INVALID_INPUT, "denoise.k must be a whole number >= 1, not " + String(dk));
+		if (!(Number.isInteger(iterations) && iterations >= 1)) throw new TrimeshBuildError(ERROR_CODES.INVALID_INPUT, "denoise.iterations must be a whole number >= 1, not " + String(iterations));
+		if (!(maxDistance > 0 && isFinite(maxDistance))) throw new TrimeshBuildError(ERROR_CODES.INVALID_INPUT, "denoise.maxDistance must be a finite distance > 0, not " + String(maxDistance));
 		var smoothed = denoisePoints({ count: first.count, positions: first.coords }, {
-			method: d.method || "bilateral",
-			k: d.k || 16,
-			iterations: d.iterations || 1,
-			maxDistance: d.maxDistance || 5 * first.medianSpacing
+			method: d.method === undefined ? "bilateral" : d.method,
+			k: dk,
+			iterations: iterations,
+			maxDistance: maxDistance
 		});
 		report("prepare", 0);
 		cloud = prepareCloud({ count: first.count, positions: smoothed.positions }, Object.assign({}, opts, { origin: { x: 0, y: 0, z: 0 }, deferNormals: !!deferNormals }));

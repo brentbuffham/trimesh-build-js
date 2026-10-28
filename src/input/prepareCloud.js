@@ -130,6 +130,12 @@ export function prepareCloud(cols, options) {
 	if (opts.tolerance !== undefined && !(opts.tolerance > 0 && isFinite(opts.tolerance))) {
 		throw bad(ERROR_CODES.INVALID_INPUT, "tolerance must be a finite distance > 0");
 	}
+	var k = opts.k === undefined ? 20 : opts.k;
+	var radiusMultiplier = opts.maxRadiusMultiplier === undefined ? 3 : opts.maxRadiusMultiplier;
+	if (!(Number.isInteger(k) && k >= 1)) throw bad(ERROR_CODES.INVALID_INPUT, "k must be a whole number >= 1, not " + String(k));
+	if (!(radiusMultiplier > 0 && isFinite(radiusMultiplier))) {
+		throw bad(ERROR_CODES.INVALID_INPUT, "maxRadiusMultiplier must be a finite number > 0, not " + String(radiusMultiplier));
+	}
 	if (opts.normals && opts.normals.length !== 3 * n) {
 		throw bad(ERROR_CODES.INVALID_INPUT, "options.normals must have 3 x count values");
 	}
@@ -191,7 +197,7 @@ export function prepareCloud(cols, options) {
 	if (spacingChanged) medianSpacing = estimateMedianSpacing(index, coords, n);
 
 	// k = 20 reaches about 2.5 spacings; 4x the cull multiple leaves room
-	var normalOptions = { k: opts.k || 20, maxDistance: (opts.maxRadiusMultiplier || 3) * medianSpacing * 4 };
+	var normalOptions = { k: k, maxDistance: radiusMultiplier * medianSpacing * 4 };
 	// deferNormals: the caller fits them (buildMeshAsync splits the fit across workers)
 	if (!normals && !opts.deferNormals) normals = pointNormals(shifted, normalOptions).normal;
 

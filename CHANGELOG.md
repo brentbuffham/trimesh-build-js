@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.7
+
+- **A 0 you pass is no longer swallowed by a default.** `denoise: { iterations: 0 }` ran one pass; `denoise: { k: 0 }` ran with 16; `denoise.maxDistance: 0`, `k: 0` and `maxRadiusMultiplier: 0` were replaced by their defaults without a word (`x || default`). Defaults now apply only to `undefined`, and a bad number throws `INVALID_INPUT`: `k` and `denoise.k` and `denoise.iterations` must be whole numbers >= 1, `maxRadiusMultiplier` and `denoise.maxDistance` must be finite and > 0, and `thin: NaN` is refused instead of reading as "off". `thin: 0` and `thin: false` still mean off.
+- **An option passed as `undefined` takes its default.** `buildMesh(cols, { k: undefined })` copied the undefined over the default `k: 20` and crashed inside the neighbour query.
+
 ## 0.6.6
 
 - **Depends on las-laz-js ^0.18.0** (screen-shape and pruned selections, cloneStore, a faster tile build). Nothing this library uses changed: `dedupe`, `denoisePoints`, `buildIndex`, `pointNormals` and `pointsInRadius` are as in 0.17. A 0.x caret stops at the next minor, so `^0.17.0` would have left a second copy of las-laz-js in an app that moved to 0.18.
