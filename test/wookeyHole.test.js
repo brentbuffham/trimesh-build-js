@@ -100,4 +100,26 @@ describe("Wookey Hole cave sample", function () {
 		console.log("part 3 winding kept", same, "reversed", reversed, "of", before.length);
 		expect(same / (same + reversed)).toBeGreaterThan(0.99);
 	}, 180000);
+
+	// The isolated sheet beside the cave (6,813 triangles) closes into a thin pancake when its rim is
+	// patched. Its volume (-0.27 m3 on 15 m2) is noise, and used to overrule the vote that oriented it:
+	// every one of its triangles was reversed.
+	it("part 3: the isolated sheet keeps the vote's winding when patching seals it into a pancake", async function () {
+		var pts = await load(sample("wookey-hole-3.laz"));
+		var r = buildMesh({ count: pts.count, x: pts.x, y: pts.y, z: pts.z }, { thin: 0.05 });
+		var o = orientMesh(r, null), order = o.perComponent.map(function (c, i) { return [c.triangles, i]; }).sort(function (a, b) { return b[0] - a[0]; });
+		var sheetId = order[1][1];
+		expect(o.perComponent[sheetId].triangles).toBe(6813);
+		var before = r.soup.filter(function (t, i) { return o.componentOf[i] === sheetId; }).map(function (t) { return rotKey(t.v0.id, t.v1.id, t.v2.id); });
+		patchLoops(r);
+		var after = new Set(r.soup.map(function (t) { return rotKey(t.v0.id, t.v1.id, t.v2.id); }));
+		var same = 0, reversed = 0;
+		before.forEach(function (k) {
+			var ids = k.split(",");
+			if (after.has(k)) same++;
+			else if (after.has(rotKey(+ids[0], +ids[2], +ids[1]))) reversed++;
+		});
+		expect(same).toBe(before.length);
+		expect(reversed).toBe(0);
+	}, 180000);
 });

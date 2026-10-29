@@ -166,7 +166,7 @@ Winding spreads across the flattest edges first (Hoppe et al. 1992's minimum spa
 ## Known limits
 
 - **Close walls.** Two walls closer than about the point spacing can't be told apart locally. At the free edges of two close parallel sheets, the patch sees both edge rows as one strip, so bridging can happen there, even at 2 × spacing.
-- **Thin closed bubbles.** Patching the rim of an isolated sheet can close it into a thin pancake. The closed rule then sets its sign from a volume near zero, which may undo the ray vote. On Wookey part 3, one 6,813-triangle sheet comes out at −0.27 m³ and flips after `patchLoops`.
+- **Small closed pieces and floating slabs have no reliable side.** A closed piece is oriented as a cavity (void inside), but in a cave scan the small ones are usually boulders, whose void is outside; and the ray vote cannot decide a boulder or a thin slab (both sides see walls). On Wookey Hole after patching, 13 to 16 such pieces (500 to 800 triangles) and 2 to 7 "unresolved" ones (220 to 9,344) keep an arbitrary winding, and show as the back-face colour from inside. The big surfaces (289k, 496k and 175k triangles) agree with an independent vote everywhere. (A thin sealed sheet used to be reversed by its volume; since 0.6.7 the vote decides it, and when it cannot the earlier winding stays.)
 - **Break line junctions.** Break lines may meet at a shared vertex (vertices closer than the weld tolerance are merged). A break line ending on another line's interior (a T-junction) is rejected like a crossing; add a vertex to the other line at that point.
 - **Deferred:** ball pivoting and screened Poisson (as extra algorithms), decimation, smoothing, tiling of very large clouds, adaptive k.
 
