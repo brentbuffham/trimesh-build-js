@@ -19,6 +19,31 @@ function median(values) {
 	return s[(s.length - 1) >> 1];
 }
 
+// The median neighbour distance of point id, as the first test below needs it for a point's nearest
+// neighbour. That is the number the neighbour computes for itself when its own turn comes, so it is
+// kept per cloud (and per k) and found once.
+var UNKNOWN = -1, NO_NEIGHBOURS = -2;
+var medians = new WeakMap();
+
+function memoOf(cloud, k) {
+	var memo = medians.get(cloud);
+	if (!memo || memo.k !== k) { memo = { k: k, values: new Float64Array(cloud.count).fill(UNKNOWN) }; medians.set(cloud, memo); }
+	return memo.values;
+}
+
+function neighbourMedian(cloud, id, k) {
+	var values = memoOf(cloud, k);
+	var m = values[id];
+	if (m !== UNKNOWN) return m;
+	var c = cloud.coords;
+	var rn = nearestPoints(cloud.index, [c[3 * id], c[3 * id + 1], c[3 * id + 2]], k + 1);
+	var nd = [];
+	for (var i = 0; i < rn.points.length; i++) if (rn.points[i] !== id && rn.d[i] >= DUPLICATE_DISTANCE) nd.push(rn.d[i]);
+	m = nd.length ? median(nd) : NO_NEIGHBOURS;
+	values[id] = m;
+	return m;
+}
+
 /**
  * @param {import("../../input/prepareCloud.js").PreparedCloud} cloud
  * @param {number} p - source point id
@@ -38,18 +63,17 @@ export function queryNeighbourhood(cloud, p, opts) {
 		ids.push(id);
 		dist.push(r.d[i]);
 	}
-	if (ids.length === 0) return { ids: ids, valid: false };
+	var known = memoOf(cloud, opts.k);
+	if (ids.length === 0) { known[p] = NO_NEIGHBOURS; return { ids: ids, valid: false }; }
 
 	// Outlier test: a point far from everything has neighbours that are all
 	// equally far, so a cull relative to its own median keeps them. Compare
 	// with the spacing around its nearest neighbour instead; scan density
 	// varies too much across a cloud for one global spacing.
 	var localMedian = median(dist);
-	var nn = ids[0];
-	var rn = nearestPoints(cloud.index, [c[3 * nn], c[3 * nn + 1], c[3 * nn + 2]], opts.k + 1);
-	var nd = [];
-	for (var m = 0; m < rn.points.length; m++) if (rn.points[m] !== nn && rn.d[m] >= DUPLICATE_DISTANCE) nd.push(rn.d[m]);
-	if (nd.length && localMedian > opts.maxRadiusMultiplier * median(nd)) return { ids: ids, valid: false };
+	known[p] = localMedian;   // the same number p's neighbours will ask for
+	var nnMed = neighbourMedian(cloud, ids[0], opts.k);
+	if (nnMed !== NO_NEIGHBOURS && localMedian > opts.maxRadiusMultiplier * nnMed) return { ids: ids, valid: false };
 
 	var cull = opts.maxRadiusMultiplier * localMedian;
 	var kept = [];
