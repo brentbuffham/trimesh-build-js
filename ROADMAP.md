@@ -16,7 +16,17 @@ trimesh-build-js is built for Kirra: caves, drives, tunnels and blast-hole voids
 
 ## v0.5: scale and Kirra
 
-6. **Speed.** 0.3.0 has integer edge keys, one shared edge table, and normals and patches on worker threads. What's left on WALL.las at thin 0.1 (33.7 s): the weld (9.3 s), orientation (6.1 s) and las-laz-js thinning (5.2 s), all still on objects or maps rather than typed arrays. Then tile multi-million-point clouds with overlapping halos (prototype step 8 of the original spec). Also: `checkCrossings` is O(S²) on long break lines.
+6. **Speed.** Measured 2026-10-29 on a 24-thread laptop, Wookey Hole (382k points), seconds per stage, one thread / 8 workers / 16 workers:
+
+   | thin | total | thin | prepare | normals + reconstruct | weld | orient | visibility |
+   |---|---|---|---|---|---|---|---|
+   | 0.05 (260k tris) | 7.4 / 4.1 / n/a | 0.3 / 0.6 | 0.5 / 0.1 | 3.8 / 1.1 | 0.6 / 0.3 | 1.9 / 1.7 | 0.3 / 0.3 |
+   | 0.02 (514k tris) | 14.0 / 7.7 / 7.4 | 0.3 / 0.5 | 0.9 / 0.3 | 7.5 / 2.0 / 1.5 | 1.0 / 0.8 | 3.7 / 3.5 | 0.6 / 0.6 |
+   | 0.01 (612k tris) | 17.1 / 9.5 / 9.5 | 0.3 / 0.5 | 1.0 / 0.2 | 9.0 / 2.3 / 1.9 | 1.2 / 1.1 | 4.9 / 4.8 | 0.7 / 0.7 |
+
+   Every worker count gives the same triangles. Threading takes the per-point stage from 7.5-9.0 s to 1.5-2.3 s, and past 8 workers it gains almost nothing (23 workers was slower than 8 at 382k points). What is left is serial, and **orientation is now half the run (3.5-4.8 s of 7.7-9.5 s)**, then the weld and thinning. A GPU cannot help there: orientation is a priority-queue spanning-tree walk, so it needs typed arrays or per-component parallelism, not more cores. For a small cloud, workers cost more than they save: the 1M-point BHP hole scan (30k triangles after thin 0.05 and denoise) takes 2.3 s on one thread and 2.7 s on 8 workers, so `buildMeshAsync` should skip workers below some size.
+
+   0.3.0 has integer edge keys, one shared edge table, and normals and patches on worker threads. What's left on WALL.las at thin 0.1 (33.7 s): the weld (9.3 s), orientation (6.1 s) and las-laz-js thinning (5.2 s), all still on objects or maps rather than typed arrays. Then tile multi-million-point clouds with overlapping halos (prototype step 8 of the original spec). Also: `checkCrossings` is O(S²) on long break lines.
 7. **Kirra integration.**
    - A "Mesh from point cloud" dialog (FloatingDialog, worker, PresetBar), feeding `toIndexed` into `addGeneratedSurface`.
    - Mesh Edit's **Fill** switched to `patchLoop` (`auto`, figure-8 splitting, refusal reasons).
