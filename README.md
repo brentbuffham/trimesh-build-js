@@ -25,7 +25,7 @@ A triangle is accepted when the patches of 2 of its 3 vertices agree on it. Acce
 npm install trimesh-build-js
 ```
 
-> **Git install for now.** While `trimesh-build-js` and `trimesh-repair-js` are developed together, each installs the other from GitHub: this repo's `package.json` has `"trimesh-repair-js": "git+https://github.com/brentbuffham/trimesh-repair-js.git#main"`, and `las-laz-js` from GitHub the same way (0.18.1, a faster `dedupe`). When those are published to npm, replace each line with its version (`^0.1.4` or later; `^0.18.1` or later) and run `npm install`. To use this library before it is on npm: `npm install git+https://github.com/brentbuffham/trimesh-build-js.git#main`.
+> **Git install for now.** While `trimesh-build-js` and `trimesh-repair-js` are developed together, each installs the other from GitHub: this repo's `package.json` has `"trimesh-repair-js": "git+https://github.com/brentbuffham/trimesh-repair-js.git#main"`, and `las-laz-js` and `trimesh-boolean` from GitHub the same way (0.18.1, a faster `dedupe`; 0.7.8, a faster vertex pool). When those are published to npm, replace each line with its version (`^0.1.4` or later; `^0.18.1` or later; `^0.7.8` or later) and run `npm install`. To use this library before it is on npm: `npm install git+https://github.com/brentbuffham/trimesh-build-js.git#main`.
 
 ## Use
 
