@@ -25,6 +25,19 @@ import { markWeldDuplicates } from "./input/markWeldDuplicates.js";
 import { TrimeshBuildError, ERROR_CODES } from "./errors.js";
 import { VERSION, GENERATOR_VERSION } from "./version.js";
 
+// vertex ids stay below 2^26 (see acceptTriangles.js and the edge table in trimesh-repair-js)
+var MAX_VERTICES = 67108864;
+
+// Vertex ids pack into one number in the vote table and the edge table (exact below 2^26), so a
+// cloud past that would have two edges share a key: refuse it, and say how to mesh it.
+export function checkVertexLimit(vertices) {
+	if (vertices < MAX_VERTICES) return;
+	var e = new TrimeshBuildError(ERROR_CODES.TOO_MANY_POINTS,
+		vertices.toLocaleString("en-US") + " points (with break line vertices) is past the " + MAX_VERTICES.toLocaleString("en-US") + " one mesh can hold. Raise thin, or mesh the cloud in tiles.");
+	e.count = vertices;
+	throw e;
+}
+
 export var DEFAULT_OPTIONS = Object.freeze({
 	algorithm: "localDelaunay",
 	k: 20,
@@ -148,6 +161,7 @@ function prepareStages(cols, options, deferNormals) {
 	var constraints = opts.breaklines && opts.breaklines.length
 		? insertConstraints(cloud, opts.breaklines, { tolerance: tolerance, breaklineSnap: opts.breaklineSnap })
 		: EMPTY_CONSTRAINTS(cloud);
+	checkVertexLimit(cloud.count + constraints.coords.length / 3);
 	// ids the pool would weld together must not both vote
 	var weldDuplicates = markWeldDuplicates(cloud, constraints, tolerance);
 

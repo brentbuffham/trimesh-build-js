@@ -3,6 +3,7 @@
 // to undefined; a bad number is refused as INVALID_INPUT.
 import { describe, it, expect } from "vitest";
 import { buildMesh, TrimeshBuildError } from "../src/index.js";
+import { checkVertexLimit } from "../src/buildMesh.js";
 import { prepareCloud } from "../src/input/prepareCloud.js";
 import { fibonacciSphere } from "./fixtures/synthetic.js";
 
@@ -37,5 +38,18 @@ describe("what still means 'use the default'", function () {
 	});
 	it("prepareCloud without options takes k 20 and multiplier 3", function () {
 		expect(function () { prepareCloud(s); }).not.toThrow();
+	});
+});
+
+describe("the vertex limit", function () {
+	it("67,108,863 vertices fit; 67,108,864 do not, and the error names thin and tiles", function () {
+		expect(function () { checkVertexLimit(67108863); }).not.toThrow();
+		var e;
+		try { checkVertexLimit(67108864); } catch (x) { e = x; }
+		expect(e).toBeInstanceOf(TrimeshBuildError);
+		expect(e.code).toBe("TOO_MANY_POINTS");
+		expect(e.count).toBe(67108864);
+		expect(e.message).toMatch(/thin/);
+		expect(e.message).toMatch(/tiles/);
 	});
 });
