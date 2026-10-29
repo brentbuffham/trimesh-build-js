@@ -58,10 +58,6 @@ trimesh-build-js is built for Kirra: caves, drives, tunnels and blast-hole voids
     - Stop `fillGaps` capping isolated two-triangle fragments.
     - Bring the spec text in line with the code.
 
-## Before publishing to npm
-
-- `package.json` installs trimesh-repair-js from GitHub (`git+https://github.com/brentbuffham/trimesh-repair-js.git#main`). Publish trimesh-repair-js first, then replace that line with its version (`^0.1.4` or later), run `npm install` and the tests. The same for `las-laz-js` (git `#main`, 0.18.1 -> `^0.18.1`) and `trimesh-boolean` (git `#master`, 0.7.8 -> `^0.7.8`). trimesh-repair-js's devDependency on this library is the same swap.
-
 ## Done
 
 - **0.6.7:** a thin closed sheet is left to the vote, not set by its volume (trimesh-repair-js 0.1.6): Wookey Hole part 3's 6,813-triangle sheet kept its winding through `patchLoops` (all of it was reversed before).
