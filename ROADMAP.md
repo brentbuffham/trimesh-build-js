@@ -48,6 +48,10 @@ trimesh-build-js is built for Kirra: caves, drives, tunnels and blast-hole voids
     - Stop `fillGaps` capping isolated two-triangle fragments.
     - Bring the spec text in line with the code.
 
+## Before publishing to npm
+
+- `package.json` installs trimesh-repair-js from GitHub (`git+https://github.com/brentbuffham/trimesh-repair-js.git#main`). Publish trimesh-repair-js first, then replace that line with its version (`^0.1.3` or later), run `npm install` and the tests. trimesh-repair-js's devDependency on this library is the same swap.
+
 ## Done
 
 - **0.5.0:** cave orientation without scanner positions. A ray vote (`"visibility"`, after Takayama et al. 2014) points normals at the side whose rays come back off the opposite wall. Wookey Hole orients as `"visibility"` in about 0.2 s, and matches the closed part 3's signed volume on the whole cave.
