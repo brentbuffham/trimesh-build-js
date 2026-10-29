@@ -26,6 +26,8 @@ trimesh-build-js is built for Kirra: caves, drives, tunnels and blast-hole voids
 
    **After trimesh-repair-js 0.1.3** (typed-array edge table, one precomputed neighbour table in `orientMesh`; identical windings on scrambled caves): Wookey at thin 0.02 on 8 workers 7.7 s -> 5.5 s (orient 3.5 s -> 1.6 s), WALL.las at thin 0.1 on 8 workers 58.1 s -> 45.1 s (orient 25.6 s -> 13.3 s, measured with the CPU profiler on). Main thread on WALL, 45 s: thinning (`dedupeSelection` in las-laz-js) 6.2 s; orientation 8.5 s over all its calls (its own loop 3.1, `neighbourTable` 2.2, heap 1.1); weld (`ingestToBMS`) 5.3 s (`findNearest` 2.3, building pool vertices 2.2); `cleanSoup` 2.5 s; `validateMesh` 1.9 s; visibility vote 2.1 s; garbage collection 2.9 s; idle, waiting on workers, 11.3 s. Next, in order: build each triangle's neighbours while the edge table is built (no second pass of 8.6M lookups), weld on typed arrays, thinning in las-laz-js, then run the weld and orientation per tile on workers (the tiling item). Timings taken on a machine that other work was also using vary by up to 1.5x; compare runs taken together.
 
+   **After las-laz-js 0.18.1** (`dedupe` skips the unused nearest-kept map): WALL.las 33.7 s on 8 workers (thin 4.7 s -> 2.3 s). Wookey thin 0.02 4.5 s.
+
    **After trimesh-repair-js 0.1.4** (weld looks vertices up in a typed array; `orientMesh` builds neighbours from one pass over the edge slots): Wookey thin 0.02, 8 workers 5.0 s (orient 1.4 s, weld 0.6 s); WALL.las thin 0.1, 8 workers **37.3 s** (was 58.1 s: thin 4.7, normals + reconstruct 12.6, weld 6.1, orient 9.4, visibility 4.2). The 27-cell search in trimesh-boolean's vertex pool (`findNearest`, about 2.3 s of the weld on WALL) is next for the weld: a point's tolerance ball touches at most 8 of its cells, not 27, with the same answer, but it is in trimesh-boolean.
 
    Every worker count gives the same triangles. Threading takes the per-point stage from 7.5-9.0 s to 1.5-2.3 s, and past 8 workers it gains almost nothing (23 workers was slower than 8 at 382k points). What is left is serial, and **orientation is now half the run (3.5-4.8 s of 7.7-9.5 s)**, then the weld and thinning. A GPU cannot help there: orientation is a priority-queue spanning-tree walk, so it needs typed arrays or per-component parallelism, not more cores. For a small cloud, workers cost more than they save: the 1M-point BHP hole scan (30k triangles after thin 0.05 and denoise) takes 2.3 s on one thread and 2.7 s on 8 workers, so `buildMeshAsync` should skip workers below some size.
@@ -54,7 +56,7 @@ trimesh-build-js is built for Kirra: caves, drives, tunnels and blast-hole voids
 
 ## Before publishing to npm
 
-- `package.json` installs trimesh-repair-js from GitHub (`git+https://github.com/brentbuffham/trimesh-repair-js.git#main`). Publish trimesh-repair-js first, then replace that line with its version (`^0.1.3` or later), run `npm install` and the tests. trimesh-repair-js's devDependency on this library is the same swap.
+- `package.json` installs trimesh-repair-js from GitHub (`git+https://github.com/brentbuffham/trimesh-repair-js.git#main`). Publish trimesh-repair-js first, then replace that line with its version (`^0.1.4` or later), run `npm install` and the tests. The same for `las-laz-js` (git `#main`, 0.18.1 -> `^0.18.1`). trimesh-repair-js's devDependency on this library is the same swap.
 
 ## Done
 

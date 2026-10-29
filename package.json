@@ -43,7 +43,7 @@
 	"dependencies": {
 		"@kninnug/constrainautor": "^4.1.0",
 		"delaunator": "^5.1.0",
-		"las-laz-js": "^0.18.0",
+		"las-laz-js": "git+https://github.com/brentbuffham/las-laz-js.git#main",
 		"trimesh-boolean": "^0.7.7",
 		"trimesh-repair-js": "git+https://github.com/brentbuffham/trimesh-repair-js.git#main"
 	},
