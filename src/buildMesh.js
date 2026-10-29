@@ -24,6 +24,7 @@ import { ingestToBMS, cleanSoup, orientMesh, orientByVisibility, validateMesh, c
 import { markWeldDuplicates } from "./input/markWeldDuplicates.js";
 import { TrimeshBuildError, ERROR_CODES } from "./errors.js";
 import { VERSION, GENERATOR_VERSION } from "./version.js";
+import { countSelfIntersections } from "./countSelfIntersections.js";
 
 // vertex ids stay below 2^26 (see acceptTriangles.js and the edge table in trimesh-repair-js)
 var MAX_VERTICES = 67108864;
@@ -50,7 +51,8 @@ export var DEFAULT_OPTIONS = Object.freeze({
 	maxGapEdges: 6,
 	repairFolds: true,
 	visibility: true,
-	closeHoles: false
+	closeHoles: false,
+	checkSelfIntersections: false
 });
 
 // An option the caller passed as undefined means "not given": Object.assign
@@ -261,7 +263,9 @@ function finishStages(s, rec) {
 			foldsKept: folds.kept,
 			visibilityMs: visibilityMs,
 			gapsFilled: gaps.filled,
-			holesFilledTriangles: filled
+			holesFilledTriangles: filled,
+			// crossings in the finished mesh, only when asked for (seconds on a large mesh)
+			selfIntersections: opts.checkSelfIntersections ? countSelfIntersections(bms) : null
 		}
 	};
 	// the shared edge map travels with the result, for patchLoop (not enumerable)

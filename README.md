@@ -147,6 +147,7 @@ Two blast-hole scans of about 1 million points each, thinned to 5 cm (about 16,0
 | `repairFolds` | `true` | Cut twisted strips at their folds so the mesh can be oriented (see Orientation). |
 | `visibility` | `true` | Ray vote for the void side of open components without viewpoints (see Orientation); `false`, or `{ samples, rays, minMargin }` (defaults 1000, 8, 0.2). |
 | `closeHoles` | `false` | `{ maxLoopEdges }`: fill real holes with a centroid fan. |
+| `checkSelfIntersections` | `false` | Count the places the mesh passes through itself and put them in `report.selfIntersections` (`crossingPairs`, `coplanarPairs`, `triangles`, `ms`). It takes seconds on a large mesh, so it is off by default. `countSelfIntersections(result)` does the same on any result, for instance after `patchLoops`: Wookey Hole part 3 has 203 crossing pairs in 162,268 triangles as built and 15,798 after patching, because a faired patch can cut through the wall beside it. |
 
 Only bad input throws (`TrimeshBuildError` with a `code`): wrong column lengths, a Float32 cloud with no origin, non-finite coordinates, crossing break lines, or fewer than 3 points. Problems with the result are reported, never thrown.
 
