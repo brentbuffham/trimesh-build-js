@@ -67,7 +67,7 @@ import { buildMeshAsync } from "trimesh-build-js";
 // browser
 var result = await buildMeshAsync(cols, {
 	thin: 0.05,
-	workers: navigator.hardwareConcurrency - 1,
+	workers: "auto",
 	createWorker: function () {
 		return new Worker(new URL("trimesh-build-js/worker/browser", import.meta.url), { type: "module" });
 	},
@@ -79,6 +79,8 @@ import { Worker } from "node:worker_threads";
 var workerUrl = new URL(import.meta.resolve("trimesh-build-js/worker/node"));
 var result = await buildMeshAsync(cols, { workers: 8, createWorker: function () { return new Worker(workerUrl); } });
 ```
+
+`workers: "auto"` uses one fewer than the cores, at most 8 (more gains almost nothing), and stays on the calling thread below 20,000 points after thinning, where starting workers costs more than it saves (8 workers take 1.3x as long at 10,000 points and half as long at 100,000). A number is used as given. After the threaded stages, what is left runs on one thread: thinning, the weld, orientation and the visibility vote. On WALL.las (4.3M points, thin 0.1) that is 8.9 s for the weld and 25.6 s for orientation of a 58 s build.
 
 At 1M points on a 24-core machine the whole build takes about 14.5 s (triangulation 3.4 s), down from 55 s in 0.2.0, and peaks at about 1.1 GB. For a browser tab, set `maxPoints`: the build then stops with `TOO_MANY_POINTS` and a suggested thin value instead of running out of memory.
 

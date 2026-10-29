@@ -2,6 +2,7 @@
 
 ## 0.6.7
 
+- **`buildMeshAsync` takes `workers: "auto"`.** It uses one fewer than the cores, at most 8, and builds on the calling thread when the cloud has fewer than 20,000 points after thinning (measured: 8 workers take 1.26x as long at 10,000 points and 0.87x at 20,000). A number of workers is used as given. The mesh is the same either way.
 - **Version stamp.** `VERSION` (the package release) and `GENERATOR_VERSION` (a whole number, 1 today) are exported, and every result carries `report.version` and `report.generatorVersion`. Store `generatorVersion` beside a mesh you keep and rebuild it when the current one is higher; a mesh stored before this release has none. It is bumped only when a fix changes the mesh for the same input and options, not on every release.
 - **A 0 you pass is no longer swallowed by a default.** `denoise: { iterations: 0 }` ran one pass; `denoise: { k: 0 }` ran with 16; `denoise.maxDistance: 0`, `k: 0` and `maxRadiusMultiplier: 0` were replaced by their defaults without a word (`x || default`). Defaults now apply only to `undefined`, and a bad number throws `INVALID_INPUT`: `k` and `denoise.k` and `denoise.iterations` must be whole numbers >= 1, `maxRadiusMultiplier` and `denoise.maxDistance` must be finite and > 0, and `thin: NaN` is refused instead of reading as "off". `thin: 0` and `thin: false` still mean off.
 - **An option passed as `undefined` takes its default.** `buildMesh(cols, { k: undefined })` copied the undefined over the default `k: 20` and crashed inside the neighbour query.

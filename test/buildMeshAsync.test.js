@@ -48,6 +48,29 @@ describe("buildMeshAsync", function () {
 		expect(calls[calls.length - 1]).toEqual(["done", 1]);
 	}, 60000);
 
+	// "auto": one fewer than the cores (at most 8), and no workers below 20,000 points
+	var CORES = (globalThis.navigator && globalThis.navigator.hardwareConcurrency) | 0;
+
+	it("auto keeps a small cloud on this thread", async function () {
+		var cols = fibonacciSphere(3000, 5), started = 0;
+		var par = await buildMeshAsync(cols, { workers: "auto", createWorker: function () { started++; return createWorker(); } });
+		expect(started).toBe(0);
+		expect(signature(par)).toEqual(signature(buildMesh(cols, {})));
+	});
+
+	it("a number of workers is honoured even on a small cloud", async function () {
+		var started = 0;
+		await buildMeshAsync(fibonacciSphere(3000, 5), { workers: 2, createWorker: function () { started++; return createWorker(); } });
+		expect(started).toBe(2);
+	}, 60000);
+
+	it.skipIf(CORES < 3)("auto starts workers on a large cloud, at most 8, and gives the buildMesh mesh", async function () {
+		var cols = fibonacciSphere(25000, 5), started = 0;
+		var par = await buildMeshAsync(cols, { workers: "auto", createWorker: function () { started++; return createWorker(); } });
+		expect(started).toBe(Math.min(8, CORES - 1));
+		expect(signature(par)).toEqual(signature(buildMesh(cols, {})));
+	}, 120000);
+
 	it("without workers it is buildMesh", async function () {
 		var cols = fibonacciSphere(1000, 5);
 		expect(signature(await buildMeshAsync(cols, {}))).toEqual(signature(buildMesh(cols, {})));

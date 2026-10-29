@@ -267,6 +267,16 @@ export function buildMesh(cols, options) {
 	return finishStages(s, s.reconstruct(s.cloud, s.constraints, s.opts));
 }
 
+// Measured (8 workers, sphere clouds): one thread wins below ~10,000 points, workers win from
+// ~20,000 (0.87x), and by 100,000 they take half the time. Past 8 workers nothing more is gained.
+var AUTO_MIN_POINTS = 20000;
+var AUTO_MAX_WORKERS = 8;
+
+function autoWorkers() {
+	var cores = (globalThis.navigator && globalThis.navigator.hardwareConcurrency) | 0;
+	return Math.min(AUTO_MAX_WORKERS, cores - 1);
+}
+
 /**
  * buildMesh with the per-point triangulation spread over worker threads.
  * Same mesh as buildMesh: each patch depends only on its own point's
@@ -278,18 +288,21 @@ export function buildMesh(cols, options) {
  *
  * @param {Object} cols - as buildMesh
  * @param {Object} [options] - as buildMesh, plus:
- *   workers (number of workers; 0 or 1 runs buildMesh on this thread) and
+ *   workers (number of workers; 0 or 1 runs buildMesh on this thread; "auto" uses one fewer than the
+ *   cores, at most 8, and stays on this thread below 20,000 points after thinning) and
  *   createWorker (function returning a Worker that runs proposeWorker.browser.js or proposeWorker.node.js)
  * @returns {Promise<Object>} the buildMesh result
  */
 export async function buildMeshAsync(cols, options) {
 	var opts = options || {};
-	var workers = opts.workers | 0;
+	var auto = opts.workers === "auto";
+	var workers = auto ? autoWorkers() : opts.workers | 0;
 	if (workers < 2 || typeof opts.createWorker !== "function") return buildMesh(cols, opts);
 	// Normals are fitted on the workers too, unless the caller supplied them
 	var s = prepareStages(cols, opts, !opts.normals);
 	var rec;
-	if (s.opts.algorithm === "localDelaunay") {
+	// "auto" keeps a small cloud on this thread: starting workers costs more than they save
+	if (s.opts.algorithm === "localDelaunay" && !(auto && s.cloud.count < AUTO_MIN_POINTS)) {
 		rec = await reconstructInWorkers(s, workers, opts.createWorker);
 	} else {
 		if (!s.cloud.normals) s.cloud.normals = pointNormals({ count: s.cloud.count, positions: s.cloud.coords }, s.cloud.normalOptions).normal;
