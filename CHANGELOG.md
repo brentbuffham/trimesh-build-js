@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.8
+
+- **Depends on las-laz-js `^0.19.0`.** Nothing in the build changes (`GENERATOR_VERSION` stays 1). The release adds ghost (double layer) finding and fixing to las-laz-js, for a scan where a second sheet lies over or under the real surface: run it on the cloud before `buildMesh` if the surface comes out doubled.
+
 ## 0.6.7
 
 - **`countSelfIntersections(result)` and the `checkSelfIntersections` option.** Counts where the mesh passes through itself, using trimesh-boolean's `bmsSelfIntersect` (pairs that share a vertex are neighbours, not crossings; coplanar overlaps count by area). `buildMesh(cols, { checkSelfIntersections: true })` puts the counts in `report.selfIntersections`; it is `null` otherwise, because the check takes seconds on a large mesh. Traced on Wookey Hole part 3: the reconstruction has 203 crossing pairs in 162,268 triangles, and `patchLoops` brings it to 15,798 (99% of them from the patches). Measured while writing this, not yet changed: 158 of the 268 loops the `auto` method patches have faired patches with some triangles crossing the mesh (3,052 of 20,604), while the other methods can patch few loops at all (`fan` patched 50 of 271), so rejecting crossing patches would leave over half the holes open.

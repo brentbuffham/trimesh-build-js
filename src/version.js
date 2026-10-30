@@ -11,5 +11,5 @@
 // the current one; a mesh stored before this stamp existed has none.
 //=============================================================
 
-export var VERSION = "0.6.7";
+export var VERSION = "0.6.8";
 export var GENERATOR_VERSION = 1;
